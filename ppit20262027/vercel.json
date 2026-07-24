@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/send-emails",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/process-birthdays",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
