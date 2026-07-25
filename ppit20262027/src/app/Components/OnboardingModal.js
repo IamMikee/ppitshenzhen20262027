@@ -67,7 +67,7 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
   // Generate year options (2000 to current year + 1)
   const currentYear = new Date().getFullYear();
   const yearOptions = [];
-  for (let year = currentYear + 1; year >= 2000; year--) {
+  for (let year = currentYear; year >= 2023; year--) {
     yearOptions.push(year);
   }
 
@@ -104,7 +104,7 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
               value={formData.fullName}
               onChange={handleChange}
               placeholder="Enter your full name"
-              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full px-4 py-2.5 border rounded-lg text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.fullName ? "border-red-500" : "border-gray-300"
               }`}
               disabled={loading}
@@ -124,7 +124,7 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
               name="birthday"
               value={formData.birthday}
               onChange={handleChange}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full px-4 py-2.5 border rounded-lg text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.birthday ? "border-red-500" : "border-gray-300"
               }`}
               disabled={loading}
@@ -133,7 +133,6 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
             {errors.birthday && (
               <p className="text-red-500 text-xs mt-1">{errors.birthday}</p>
             )}
-            <p className="text-xs text-gray-400 mt-1">Your birthday will be used for birthday greetings.</p>
           </div>
 
           {/* Cohort Year / Intake Year */}
@@ -145,7 +144,7 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
               name="cohortYear"
               value={formData.cohortYear}
               onChange={handleChange}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full px-4 py-2.5 border rounded-lg text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.cohortYear ? "border-red-500" : "border-gray-300"
               }`}
               disabled={loading}
