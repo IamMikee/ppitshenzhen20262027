@@ -1,5 +1,7 @@
 "use client";
 
+import Link from 'next/link';
+
 export default function ControlPanelIndex() {
     return (
         <div className="w-full max-w-4xl bg-[#1f1f1f] rounded-xl shadow-2xl p-12 text-white text-center">
@@ -9,16 +11,21 @@ export default function ControlPanelIndex() {
                     Select a tool from the sidebar to get started
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+                    <Link href="/ctrlpanel/adminstatus">
                     <div className="bg-[#2a2a2a] rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition">
                         <div className="text-3xl mb-2">👑</div>
                         <h3 className="text-white font-semibold">Admin Status</h3>
                         <p className="text-gray-400 text-sm">Manage user admin privileges</p>
                     </div>
+                    </Link>
+
+                    <Link href="/ctrlpanel/emailsender">
                     <div className="bg-[#2a2a2a] rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition">
                         <div className="text-3xl mb-2">📧</div>
                         <h3 className="text-white font-semibold">Email Broadcast</h3>
                         <p className="text-gray-400 text-sm">Send emails to participants</p>
                     </div>
+                    </Link>
                 </div>
             </div>
         </div>
