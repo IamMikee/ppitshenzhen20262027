@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth } from "../../../lib/firebase";
+import { auth } from "../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
-import { getAllUsers } from "../../../services/forms";
+import { db } from "../../../../lib/firebase";
+import { getAllUsers } from "../../../../services/forms";
 
 export default function AdminStatusPage() {
     const [selectedEmail, setSelectedEmail] = useState("");
