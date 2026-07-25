@@ -70,8 +70,10 @@ export default function ControlPanelLayout({ children }) {
         <div className="min-h-screen bg-[#252525] font-sans flex">
             {/* Sidebar */}
             <div className="font-montserrat pt-28 w-60 bg-[#1e1e1e] border-r border-gray-700 p-8 hidden md:block">
-                <h2 className="text-white text-2xl font-semibold mb-8">
+                <h2 className="text-white text-2xl font-semibold mb-8 hover:text-purple-500">
+                    <Link href="/ctrlpanel">
                     Control Panel
+                    </Link>
                 </h2>
 
                 <nav className="space-y-2">
