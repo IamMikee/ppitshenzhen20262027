@@ -24,6 +24,15 @@ export default {
         background: "var(--background)",
         foreground: "var(--foreground)",
       },
+      animation: {
+        shimmer: "shimmer 4s linear infinite",
+      },
+      keyframes: {
+        shimmer: {
+          "0%": {backgroundPosition: "0% 50%"},
+          "100%": {backgroundPosition: "200% 50%"},
+        },
+      },
     },
   },
   plugins: [],
