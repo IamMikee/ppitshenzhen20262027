@@ -364,6 +364,13 @@ export default function RecruitmentPage() {
                     <div className="text-6xl mb-4">✅</div>
                     <h3 className="text-2xl font-bold text-green-600 mb-2">Form Submitted Successfully!</h3>
                     <p className="text-gray-500">Your application has been received. You can now proceed to the next stages.</p>
+                    {applicationData?.candidateId && (
+                        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg inline-block">
+                            <p className="text-sm text-gray-600">Your Candidate ID:</p>
+                            <p className="text-xl font-bold text-red-600">{applicationData.candidateId}</p>
+                            <p className="text-xs text-gray-500">Division: {applicationData.division}</p>
+                        </div>
+                    )}
                 </div>
             );
         }
