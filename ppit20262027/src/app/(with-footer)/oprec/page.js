@@ -210,6 +210,11 @@ export default function RecruitmentPage() {
         if (!formData.motivation.trim()) errors.motivation = "Esai motivasi wajib diisi";
         if (!formData.firstChoice) errors.firstChoice = "Pilihan pertama wajib dipilih";
         if (!formData.secondChoice) errors.secondChoice = "Pilihan kedua wajib dipilih";
+
+        if (formData.firstChoice && formData.secondChoice && formData.firstChoice === formData.secondChoice) {
+            errors.secondChoice = "Pilihan kedua harus berbeda dari pilihan pertama";
+        }
+
         if (!formData.otherPosition) errors.otherPosition = "Harap pilih salah satu";
         if (!formData.statementFile) errors.statementFile = "Surat pernyataan wajib diupload";
         if (!formData.cvFile) errors.cvFile = "CV wajib diupload";
@@ -492,7 +497,10 @@ export default function RecruitmentPage() {
                     >
                         <option value="">Pilih bidang</option>
                         {fields.map(f => (
-                            <option key={f} value={f}>{f}</option>
+                            // ✅ Skip the selected first choice
+                            f !== formData.firstChoice && (
+                                <option key={f} value={f}>{f}</option>
+                            )
                         ))}
                     </select>
                     {formErrors.secondChoice && <p className="text-red-500 text-sm mt-1">{formErrors.secondChoice}</p>}
@@ -537,7 +545,7 @@ export default function RecruitmentPage() {
                             Surat Pernyataan <span className="text-red-500">*</span>
                         </label>
                         <a
-                            href="https://docs.google.com/document/d/1CN4a715KlMbRPATh07J88tfVW4yYEABMXASLtwOjmc0/export?format=pdf"
+                            href="https://docs.google.com/document/d/1CN4a715KlMbRPATh07J88tfVW4yYEABMXASLtwOjmc0/export?format=docx&tab=t.0"
                             className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1 underline-offset-2 hover:underline"
                         >
                             📄 Download Template
@@ -655,187 +663,211 @@ export default function RecruitmentPage() {
 
             <Header />
 
-            <div className="min-h-[calc(100vh-200px)] bg-gradient-to-b from-amber-100 via-orange-100/80 to-red-100 py-12 md:py-16 px-4 md:px-8 lg:px-16">
-                <div className="max-w-6xl mx-auto">
-                    <div className="mb-10 md:mb-14 mt-12">
-                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-montserrat font-bold text-gray-800">
-                            Hi, <span className="text-red-700">{userName}</span>!
-                            <span className="block mt-1 text-lg md:text-xl lg:text-2xl font-light text-gray-500">
-                                Welcome to PPIT Shenzhen Open Recruitment Application 2026/2027
-                            </span>
-                        </h1>
-                    </div>
-
-                    <div className="mb-8">
-                        <h2 className="text-xl md:text-2xl font-montserrat font-semibold text-gray-700 mb-6">
-                            My Application Progress:
-                        </h2>
-
-                        <div className="relative">
-                            <div className="absolute left-0 right-0 top-8 h-1 bg-gray-200 rounded-full"></div>
-
-                            <div
-                                className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
-                                style={{
-                                    width: `${(Object.values(stageStatus).filter(s => s === "completed").length / stages.length) * 100}%`,
-                                    background: 'linear-gradient(to right, #fbbf24, #dc2626)',
-                                }}
-                            ></div>
-
-                            <div className="relative flex justify-between items-center">
-                                {stages.map((stage, index) => {
-                                    const isActive = activeStage === index;
-                                    const isCompleted = isStageCompleted(index);
-                                    const isLocked = isStageLocked(index);
-                                    const isClickable = isStageClickable(index);
-
-                                    return (
-                                        <button
-                                            key={stage.id}
-                                            onClick={() => handleStageClick(index)}
-                                            disabled={!isClickable}
-                                            className="group flex flex-col items-center relative z-10"
-                                            title={isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
-                                        >
-                                            <div className={`
-                        w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center
-                        text-2xl md:text-3xl font-montserrat font-bold
-                        transition-all duration-300 transform 
-                        ${isClickable ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
-                        border-4 shadow-lg
-                        ${isActive
-                                                    ? 'border-red-600 shadow-red-300/50 scale-110'
-                                                    : isCompleted
-                                                        ? 'border-green-500 shadow-green-300/30'
-                                                        : isLocked
-                                                            ? 'border-gray-300 shadow-gray-200 opacity-60'
-                                                            : 'border-amber-400 shadow-amber-300/30'
-                                                }
-                        ${isCompleted
-                                                    ? `bg-gradient-to-br ${stage.color} text-white`
-                                                    : isLocked
-                                                        ? 'bg-gray-200 text-gray-400'
-                                                        : isActive
-                                                            ? `bg-gradient-to-br ${stage.color} text-white`
-                                                            : 'bg-white text-gray-600'
-                                                }
-                      `}>
-                                                {isCompleted ? '✓' : isLocked ? '🔒' : stage.icon}
-                                            </div>
-
-                                            <span className={`
-                        mt-2 text-xs md:text-sm font-montserrat font-medium text-center max-w-[80px] md:max-w-none
-                        ${isActive ? 'text-red-700 font-bold' : isCompleted ? 'text-green-600' : isLocked ? 'text-gray-400' : 'text-amber-600'}
-                      `}>
-                                                {stage.title}
-                                            </span>
-
-                                            <span className={`
-                        text-xs font-montserrat mt-0.5
-                        ${isActive ? 'text-red-500 font-semibold' : isCompleted ? 'text-green-500' : isLocked ? 'text-gray-400' : 'text-amber-500'}
-                      `}>
-                                                {isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-12 md:mt-16 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                        <div className={`h-1.5 bg-gradient-to-r ${stages[activeStage].color}`}></div>
-
-                        <div className="p-6 md:p-8 lg:p-10">
-                            <div className="flex items-center gap-3 mb-6">
-                                <span className="text-3xl">
-                                    {isStageLocked(activeStage) ? '🔒' : isStageCompleted(activeStage) ? '✅' : stages[activeStage].icon}
+            <div className="min-h-[calc(100vh-200px)] bg-fixed bg-cover bg-center bg-[url('/bg-oprec-app.webp')] bg-[#7E0C0E] py-12 md:py-16 px-4 md:px-8 lg:px-16">
+                <div className="min-h-[calc(100vh-200px)] bg-black/40 backdrop-blur-[2px] -m-4 md:-m-8 lg:-m-16 p-4 md:p-8 lg:p-16">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="mb-10 md:mb-14 mt-12">
+                            <h1 className="text-2xl md:text-3xl lg:text-4xl font-montserrat font-bold text-white">
+                                Hi, <span className="text-yellow-200">{userName}</span>!
+                                <span className="block mt-1 text-lg md:text-xl lg:text-2xl font-light text-gray-300">
+                                    Welcome to PPIT Shenzhen Open Recruitment Application 2026/2027
                                 </span>
-                                <div>
-                                    <h3 className="text-xl md:text-2xl font-montserrat font-bold text-gray-800">
-                                        {stages[activeStage].title}
-                                    </h3>
-                                    <p className="text-sm text-gray-500 font-montserrat">
-                                        Step {activeStage + 1} of {stages.length}
-                                        {isStageLocked(activeStage) && (
-                                            <span className="text-red-500 ml-2">🔒 Locked</span>
-                                        )}
-                                        {isStageCompleted(activeStage) && (
-                                            <span className="text-green-500 ml-2">✅ Completed</span>
-                                        )}
-                                        {!isStageLocked(activeStage) && !isStageCompleted(activeStage) && (
-                                            <span className="text-amber-500 ml-2">📋 In Progress</span>
-                                        )}
-                                    </p>
-                                </div>
-                            </div>
+                            </h1>
+                        </div>
 
-                            {isStageLocked(activeStage) ? (
-                                <div className="text-center py-12 text-gray-400">
-                                    <span className="text-6xl block mb-4">🔒</span>
-                                    <p className="font-montserrat text-lg font-medium text-gray-500">This stage is locked</p>
-                                    <p className="font-montserrat text-sm text-gray-400 mt-1">Complete the previous stages to unlock</p>
-                                </div>
-                            ) : activeStage === 0 ? (
-                                renderForm()
-                            ) : (
-                                <div className="text-center py-12 text-gray-400">
-                                    <span className="text-6xl block mb-4">⏳</span>
-                                    <p className="font-montserrat text-lg font-medium text-gray-500">Awaiting Review</p>
-                                    <p className="font-montserrat text-sm text-gray-400 mt-1">Your application is being reviewed. You'll be notified when this stage becomes available.</p>
-                                </div>
-                            )}
+                        <div className="mb-8">
+                            {/* Glass card wrapper for progress section */}
+                            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/10">
+                                <h2 className="text-xl md:text-2xl font-montserrat font-semibold text-white mb-6">
+                                    My Application Progress:
+                                </h2>
 
-                            <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
-                                <button
-                                    onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
-                                    disabled={activeStage === 0 || isStageLocked(activeStage - 1)}
-                                    className={`
-                    px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
-                    ${activeStage === 0 || isStageLocked(activeStage - 1)
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
-                                        }
-                  `}
-                                >
-                                    ← Previous
-                                </button>
+                                <div className="relative">
+                                    {/* Progress bar background */}
+                                    <div className="absolute left-0 right-0 top-8 h-1 bg-white/20 rounded-full"></div>
 
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-500 font-montserrat">
-                                        {activeStage + 1} / {stages.length}
-                                    </span>
-                                    <div className="flex gap-1">
-                                        {stages.map((_, idx) => {
-                                            const status = stageStatus[idx];
+                                    {/* Progress bar fill */}
+                                    <div
+                                        className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
+                                        style={{
+                                            width: `${(Object.values(stageStatus).filter(s => s === "completed").length / stages.length) * 100}%`,
+                                            background: 'linear-gradient(to right, #fbbf24, #dc2626)',
+                                        }}
+                                    ></div>
+
+                                    {/* Stage buttons */}
+                                    <div className="relative flex justify-between items-center">
+                                        {stages.map((stage, index) => {
+                                            const isActive = activeStage === index;
+                                            const isCompleted = isStageCompleted(index);
+                                            const isLocked = isStageLocked(index);
+                                            const isClickable = isStageClickable(index);
+
                                             return (
-                                                <div
-                                                    key={idx}
-                                                    className={`w-2 h-2 rounded-full transition-all duration-300
-                            ${idx === activeStage ? 'w-6 bg-red-600' :
-                                                            status === 'completed' ? 'bg-green-500' :
-                                                                status === 'pending' ? 'bg-amber-400' :
-                                                                    'bg-gray-300'}
-                          `}
-                                                ></div>
+                                                <button
+                                                    key={stage.id}
+                                                    onClick={() => handleStageClick(index)}
+                                                    disabled={!isClickable}
+                                                    className="group flex flex-col items-center relative z-10"
+                                                    title={isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
+                                                >
+                                                    <div className={`
+                                w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center
+                                text-2xl md:text-3xl font-montserrat font-bold
+                                transition-all duration-300 transform 
+                                ${isClickable ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
+                                border-4 shadow-lg
+                                ${isActive
+                                                            ? 'border-red-500 shadow-red-500/30 scale-110'
+                                                            : isCompleted
+                                                                ? 'border-green-400 shadow-green-400/20'
+                                                                : isLocked
+                                                                    ? 'border-white/20 shadow-none opacity-50'
+                                                                    : 'border-amber-400 shadow-amber-400/20'
+                                                        }
+                                ${isCompleted
+                                                            ? `bg-gradient-to-br ${stage.color} text-white`
+                                                            : isLocked
+                                                                ? 'bg-white/10 text-white/40'
+                                                                : isActive
+                                                                    ? `bg-gradient-to-br ${stage.color} text-white`
+                                                                    : 'bg-white/20 backdrop-blur-sm text-white/80'
+                                                        }
+                            `}>
+                                                        {isCompleted ? '✓' : isLocked ? '🔒' : stage.icon}
+                                                    </div>
+
+                                                    {/* Stage Title - COLOR LOGIC FIXED */}
+                                                    <span className={`
+                                mt-2 text-xs md:text-sm font-montserrat font-medium text-center max-w-[80px] md:max-w-none
+                                ${isCompleted
+                                                            ? 'text-green-300 font-bold'
+                                                            : isActive
+                                                                ? 'text-white font-bold drop-shadow-lg'
+                                                                : isLocked
+                                                                    ? 'text-white/40'
+                                                                    : 'text-white/80'
+                                                        }
+                            `}>
+                                                        {stage.title}
+                                                    </span>
+
+                                                    {/* Status Text - COLOR LOGIC FIXED */}
+                                                    <span className={`
+                                text-xs font-montserrat mt-0.5
+                                ${isCompleted
+                                                            ? 'text-green-300'
+                                                            : isActive
+                                                                ? 'text-amber-300 font-semibold'
+                                                                : isLocked
+                                                                    ? 'text-white/30'
+                                                                    : 'text-white/60'
+                                                        }
+                            `}>
+                                                        {isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
+                                                    </span>
+                                                </button>
                                             );
                                         })}
                                     </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <button
-                                    onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
-                                    disabled={activeStage === stages.length - 1 || isStageLocked(activeStage + 1)}
-                                    className={`
+                        <div className="mt-12 md:mt-16 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                            <div className={`h-1.5 bg-gradient-to-r ${stages[activeStage].color}`}></div>
+
+                            <div className="p-6 md:p-8 lg:p-10">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <span className="text-3xl">
+                                        {isStageLocked(activeStage) ? '🔒' : isStageCompleted(activeStage) ? '✅' : stages[activeStage].icon}
+                                    </span>
+                                    <div>
+                                        <h3 className="text-xl md:text-2xl font-montserrat font-bold text-gray-800">
+                                            {stages[activeStage].title}
+                                        </h3>
+                                        <p className="text-sm text-gray-500 font-montserrat">
+                                            Step {activeStage + 1} of {stages.length}
+                                            {isStageLocked(activeStage) && (
+                                                <span className="text-red-500 ml-2">🔒 Locked</span>
+                                            )}
+                                            {isStageCompleted(activeStage) && (
+                                                <span className="text-green-500 ml-2">✅ Completed</span>
+                                            )}
+                                            {!isStageLocked(activeStage) && !isStageCompleted(activeStage) && (
+                                                <span className="text-amber-500 ml-2">📋 In Progress</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {isStageLocked(activeStage) ? (
+                                    <div className="text-center py-12 text-gray-400">
+                                        <span className="text-6xl block mb-4">🔒</span>
+                                        <p className="font-montserrat text-lg font-medium text-gray-500">This stage is locked</p>
+                                        <p className="font-montserrat text-sm text-gray-400 mt-1">Complete the previous stages to unlock</p>
+                                    </div>
+                                ) : activeStage === 0 ? (
+                                    renderForm()
+                                ) : (
+                                    <div className="text-center py-12 text-gray-400">
+                                        <span className="text-6xl block mb-4">⏳</span>
+                                        <p className="font-montserrat text-lg font-medium text-gray-500">Awaiting Review</p>
+                                        <p className="font-montserrat text-sm text-gray-400 mt-1">Your application is being reviewed. You'll be notified when this stage becomes available.</p>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
+                                    <button
+                                        onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
+                                        disabled={activeStage === 0 || isStageLocked(activeStage - 1)}
+                                        className={`
+                    px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
+                    ${activeStage === 0 || isStageLocked(activeStage - 1)
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
+                                            }
+                  `}
+                                    >
+                                        ← Previous
+                                    </button>
+
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm text-gray-500 font-montserrat">
+                                            {activeStage + 1} / {stages.length}
+                                        </span>
+                                        <div className="flex gap-1">
+                                            {stages.map((_, idx) => {
+                                                const status = stageStatus[idx];
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        className={`w-2 h-2 rounded-full transition-all duration-300
+                            ${idx === activeStage ? 'w-6 bg-red-600' :
+                                                                status === 'completed' ? 'bg-green-500' :
+                                                                    status === 'pending' ? 'bg-amber-400' :
+                                                                        'bg-gray-300'}
+                          `}
+                                                    ></div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
+                                        disabled={activeStage === stages.length - 1 || isStageLocked(activeStage + 1)}
+                                        className={`
                     px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
                     ${activeStage === stages.length - 1 || isStageLocked(activeStage + 1)
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:shadow-red-300/50 hover:scale-105'
-                                        }
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:shadow-red-300/50 hover:scale-105'
+                                            }
                   `}
-                                >
-                                    Next →
-                                </button>
+                                    >
+                                        Next →
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
