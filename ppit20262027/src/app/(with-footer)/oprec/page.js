@@ -70,14 +70,15 @@ export default function RecruitmentPage() {
         },
     ];
 
-    const fields = [
-        "Dana Usaha",
-        "Departemen Olahraga",
-        "Hubungan Masyarakat",
-        "Informasi Teknologi",
-        "Media Kreatif",
-        "Perkembangan Karir & Akademik",
-        "Sosial Budaya"
+    // 🆕 Merged divisions with names and codes
+    const divisions = [
+        { name: "Dana Usaha", code: "DU" },
+        { name: "Departemen Olahraga", code: "DO" },
+        { name: "Hubungan Masyarakat", code: "HM" },
+        { name: "Informasi Teknologi", code: "IT" },
+        { name: "Media Kreatif", code: "MK" },
+        { name: "Perkembangan Karir & Akademik", code: "PKA" },
+        { name: "Sosial Budaya", code: "SB" }
     ];
 
     /* Auth check - fetch user name and application data from Firestore */
@@ -229,7 +230,7 @@ export default function RecruitmentPage() {
         formData.append("file", file);
         formData.append(
             "upload_preset",
-            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_OPREC  // Now uses your new preset
+            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET_OPREC
         );
         formData.append("public_id", `${user.uid}_${fileType}_${Date.now()}`);
 
@@ -251,6 +252,40 @@ export default function RecruitmentPage() {
         return data.secure_url;
     };
 
+    // 🆕 Get candidate ID based on division
+    const getNextCandidateId = async (divisionName) => {
+        try {
+            // Find the division code
+            const division = divisions.find(d => d.name === divisionName);
+            if (!division) {
+                throw new Error(`Invalid division: ${divisionName}`);
+            }
+
+            // Reference to the counter document for this division
+            const counterRef = doc(db, "applicationsCounter", division.code);
+            const counterSnap = await getDoc(counterRef);
+            
+            let currentCount = 0;
+            if (counterSnap.exists()) {
+                currentCount = counterSnap.data().count || 0;
+            }
+            
+            // Increment the count
+            const newCount = currentCount + 1;
+            
+            // Update the counter
+            await setDoc(counterRef, { count: newCount });
+            
+            // Format as DU-001, SB-001, etc.
+            const paddedNumber = String(newCount).padStart(3, '0');
+            return `${division.code}-${paddedNumber}`;
+            
+        } catch (error) {
+            console.error("Error getting candidate ID:", error);
+            throw error;
+        }
+    };
+
     const handleSubmit = async () => {
         if (!validateForm()) return;
 
@@ -264,9 +299,14 @@ export default function RecruitmentPage() {
                 uploadFileToCloudinary(formData.cvFile, 'cv')
             ]);
 
-            // Create application document with Cloudinary URLs
+            // 🆕 Get the candidate ID based on their first choice
+            const candidateId = await getNextCandidateId(formData.firstChoice);
+
+            // Create application document with Cloudinary URLs and candidate ID
             const applicationData = {
                 uid: user.uid,
+                candidateId: candidateId,
+                division: formData.firstChoice, // Store which division they applied to
                 email: formData.email,
                 name: formData.fullName,
                 phone: formData.phone,
@@ -278,8 +318,8 @@ export default function RecruitmentPage() {
                 firstChoice: formData.firstChoice,
                 secondChoice: formData.secondChoice,
                 otherPosition: formData.otherPosition === "Ya",
-                statementUrl: statementUrl,  // Public Cloudinary URL
-                cvUrl: cvUrl,                // Public Cloudinary URL
+                statementUrl: statementUrl,
+                cvUrl: cvUrl,
                 currentStage: 0,
                 stageStatus: {
                     0: "completed",
@@ -324,6 +364,13 @@ export default function RecruitmentPage() {
                     <div className="text-6xl mb-4">✅</div>
                     <h3 className="text-2xl font-bold text-green-600 mb-2">Form Submitted Successfully!</h3>
                     <p className="text-gray-500">Your application has been received. You can now proceed to the next stages.</p>
+                    {applicationData?.candidateId && (
+                        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg inline-block">
+                            <p className="text-sm text-gray-600">Your Candidate ID:</p>
+                            <p className="text-xl font-bold text-red-600">{applicationData.candidateId}</p>
+                            <p className="text-xs text-gray-500">Division: {applicationData.division}</p>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -477,8 +524,8 @@ export default function RecruitmentPage() {
                         className={`w-full rounded-lg border ${formErrors.firstChoice ? 'border-red-500' : 'border-gray-300'} px-4 py-2 text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500`}
                     >
                         <option value="">Pilih bidang</option>
-                        {fields.map(f => (
-                            <option key={f} value={f}>{f}</option>
+                        {divisions.map(d => (
+                            <option key={d.code} value={d.name}>{d.name}</option>
                         ))}
                     </select>
                     {formErrors.firstChoice && <p className="text-red-500 text-sm mt-1">{formErrors.firstChoice}</p>}
@@ -496,12 +543,11 @@ export default function RecruitmentPage() {
                         className={`w-full rounded-lg border ${formErrors.secondChoice ? 'border-red-500' : 'border-gray-300'} px-4 py-2 text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500`}
                     >
                         <option value="">Pilih bidang</option>
-                        {fields.map(f => (
-                            // ✅ Skip the selected first choice
-                            f !== formData.firstChoice && (
-                                <option key={f} value={f}>{f}</option>
-                            )
-                        ))}
+                        {divisions
+                            .filter(d => d.name !== formData.firstChoice)
+                            .map(d => (
+                                <option key={d.code} value={d.name}>{d.name}</option>
+                            ))}
                     </select>
                     {formErrors.secondChoice && <p className="text-red-500 text-sm mt-1">{formErrors.secondChoice}</p>}
                 </div>
