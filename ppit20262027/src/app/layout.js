@@ -33,7 +33,7 @@ const cinzel_decorative = Cinzel_Decorative({
 
 export const metadata = {
 	title: "PPIT Shenzhen",
-	description: "© 2025 PPIT Shenzhen. All rights reserved.",
+	description: "© 2026 PPIT Shenzhen. All rights reserved.",
 };
 
 export default function RootLayout({ children }) {
