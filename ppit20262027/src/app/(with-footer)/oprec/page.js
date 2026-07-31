@@ -639,7 +639,7 @@ export default function RecruitmentPage() {
                         )}
                     </div>
 
-                    <p className="text-xs text-gray-400 mt-1">Upload your CV in PDF format (max 5MB)</p>
+                    <p className="text-xs text-gray-400 mt-1">Upload your CV in PDF format (max 5MB)<br></br>Please merge your CV and Portfolio into 1 PDF file (khusus Informasi Teknologi, Media Kreatif, dan Hubungan Masyarakat)**</p>
 
                     {formErrors.cvFile && (
                         <p className="text-red-500 text-sm mt-1">{formErrors.cvFile}</p>
