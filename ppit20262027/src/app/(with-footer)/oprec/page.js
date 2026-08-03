@@ -7,7 +7,6 @@ import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import Header from "../../../app/Components/Header";
 import LoadingScreen from "../../../app/Components/LoadingScreen";
-import Link from "next/link";
 
 export default function RecruitmentPage() {
     const router = useRouter();
@@ -489,9 +488,9 @@ export default function RecruitmentPage() {
                         value={formData.graduationYear}
                         onChange={handleInputChange}
                         className={`w-full rounded-lg border ${formErrors.graduationYear ? 'border-red-500' : 'border-gray-300'} px-4 py-2 text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500`}
-                        placeholder="Contoh: 2026"
-                        min="2020"
-                        max="2030"
+                        placeholder="Contoh: 2027"
+                        min="2027"
+                        max="2032"
                     />
                     {formErrors.graduationYear && <p className="text-red-500 text-sm mt-1">{formErrors.graduationYear}</p>}
                 </div>
