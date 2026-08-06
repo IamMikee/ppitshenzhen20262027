@@ -261,7 +261,6 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
         await updateEmailStatus(emailId, 'sending');
 
         const emailData = {
-            from: content.from,
             to: recipients,
             subject: content.subject || 'Broadcast Email',
             html: content.html || content.text?.replace(/\n/g, '<br>') || '',

@@ -75,7 +75,6 @@ export async function POST(request) {
             scheduledTime, 
             sendNow,
             sendIndividually = false,
-            from = `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
         } = body;
 
         // Validate
@@ -95,7 +94,6 @@ export async function POST(request) {
 
         // Prepare content based on HTML mode
         const emailContent = {
-            from: from,
             to: recipients,
             subject: content.subject || 'Broadcast Email',
             text: content.text,
