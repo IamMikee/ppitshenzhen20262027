@@ -34,7 +34,7 @@ export default function SchedulePicker({
             }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-sm font-medium">Send Now</span>
+          <span className="text-sm font-medium text-gray-500">Send Now</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -43,7 +43,7 @@ export default function SchedulePicker({
             onChange={() => onSendNowChange(false)}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-sm font-medium">Schedule</span>
+          <span className="text-sm font-medium text-gray-500">Schedule</span>
         </label>
       </div>
 
@@ -59,7 +59,7 @@ export default function SchedulePicker({
                   setDate(e.target.value);
                   setTimeout(handleScheduleChange, 100);
                 }}
-                className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-500"
                 min={today}
               />
             </div>
@@ -71,7 +71,7 @@ export default function SchedulePicker({
                   setHour(e.target.value);
                   setTimeout(handleScheduleChange, 100);
                 }}
-                className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-500"
               >
                 <option value="">Select hour</option>
                 {Array.from({ length: 24 }, (_, i) => (

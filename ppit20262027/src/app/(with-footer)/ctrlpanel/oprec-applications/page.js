@@ -110,10 +110,10 @@ export default function AdminApplications() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-red-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading applications...</p>
+          <p className="text-gray-200">Loading applications...</p>
         </div>
       </div>
     );
@@ -124,13 +124,13 @@ export default function AdminApplications() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-12 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen py-12 px-4 md:px-8">
+      <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold font-montserrat text-gray-800">
+          <h1 className="text-3xl font-bold font-montserrat text-gray-200">
             Application Management
           </h1>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-gray-300">
             Total: {applications.length} applications
           </span>
         </div>

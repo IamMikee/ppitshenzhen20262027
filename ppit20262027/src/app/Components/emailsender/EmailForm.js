@@ -14,7 +14,6 @@ export default function EmailForm({ onSuccess }) {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     
-    const [useHTML, setUseHTML] = useState(false);
     const [sendIndividually, setSendIndividually] = useState(false);
 
     const handleSubmit = async (e) => {
@@ -40,8 +39,8 @@ export default function EmailForm({ onSuccess }) {
             // Prepare content based on HTML toggle
             const emailContent = {
                 subject: content.subject,
-                text: useHTML ? '' : content.text, // Plain text
-                html: useHTML ? content.text : content.text.replace(/\n/g, '<br>'), // HTML version
+                text: content.text, // Plain text
+                html: content.text.replace(/\n/g, '<br>'), // HTML version
             };
 
             const response = await fetch('/api/emails', {
@@ -55,7 +54,6 @@ export default function EmailForm({ onSuccess }) {
                     scheduledTime: sendNow ? null : scheduledTime,
                     sendNow,
                     sendIndividually, // Send individually toggle
-                    useHTML, // HTML toggle
                 }),
             });
 
@@ -70,7 +68,6 @@ export default function EmailForm({ onSuccess }) {
             setContent({ text: '', html: '', subject: '' });
             setScheduledTime(null);
             setSendNow(false);
-            setUseHTML(false);
             setSendIndividually(false);
             
             if (onSuccess) onSuccess();
@@ -156,14 +153,6 @@ export default function EmailForm({ onSuccess }) {
             {/* TOGGLES SECTION */}
             <div className="space-y-3 bg-gray-50/50 rounded-lg p-4 border border-gray-200">
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Email Options</h3>
-                
-                {/* HTML Toggle */}
-                <ToggleSwitch
-                    label="Use HTML Format"
-                    description="Send email as HTML (paste HTML code in the content field)"
-                    checked={useHTML}
-                    onChange={setUseHTML}
-                />
 
                 {/* Send Individually Toggle */}
                 <ToggleSwitch
@@ -178,22 +167,11 @@ export default function EmailForm({ onSuccess }) {
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Email Content <span className="text-red-500">*</span>
-                    {useHTML && (
-                        <span className="ml-2 text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                            HTML Mode
-                        </span>
-                    )}
                 </label>
                 <ContentEditor 
                     content={content}
                     onContentChange={setContent}
-                    useHTML={useHTML}
                 />
-                {useHTML && (
-                    <p className="mt-2 text-xs text-blue-600">
-                        💡 Paste your HTML code here. It will be rendered as HTML email.
-                    </p>
-                )}
                 {sendIndividually && (
                     <p className="mt-1 text-xs text-green-600">
                         👤 Each recipient will receive a separate personalized email.

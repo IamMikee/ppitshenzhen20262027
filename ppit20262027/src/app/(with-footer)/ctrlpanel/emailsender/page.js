@@ -26,10 +26,10 @@ export default function EmailSenderPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="container mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Email Broadcast</h1>
-        <p className="text-gray-600 mt-2">Send emails to participants and committee members</p>
+        <h1 className="text-3xl font-bold text-gray-300">Email Broadcast</h1>
+        <p className="text-gray-400 mt-2">Send emails to participants and committee members</p>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

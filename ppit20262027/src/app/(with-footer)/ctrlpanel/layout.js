@@ -100,7 +100,7 @@ export default function ControlPanelLayout({ children }) {
 
             {/* Main Content */}
             <div className="flex-1 flex justify-center items-start px-6 md:px-12 pt-24 pb-12">
-                <div className="w-full max-w-4xl">
+                <div className="w-full max-w-6xl">
                     {children}
                 </div>
             </div>
