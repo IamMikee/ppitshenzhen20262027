@@ -96,7 +96,7 @@ export default function OnboardingModal({ onComplete, onCancel, userEmail }) {
           {/* Full Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name <span className="text-red-500">*</span>
+              Full Legal Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"

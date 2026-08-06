@@ -27,10 +27,43 @@ export default function EmailList({ emails, loading }) {
 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString();
+
+    try {
+      let date;
+      if (timestamp.seconds !== undefined && typeof timestamp.seconds === 'number') {
+        date = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+      }
+      else if (typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      }
+      else if (timestamp instanceof Date) {
+        date = timestamp;
+      }
+      else if (typeof timestamp === 'string') {
+        date = new Date(timestamp);
+      }
+      else if (typeof timestamp === 'number') {
+        date = timestamp > 10000000000 ? new Date(timestamp) : new Date(timestamp * 1000);
+      }
+      else {
+        console.warn('Unknown timestamp type:', timestamp);
+        return 'N/A';
+      }
+
+      if (isNaN(date.getTime())) return 'N/A';
+
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      console.error('Error formatting date:', error);
+      return 'N/A';
     }
-    return new Date(timestamp).toLocaleString();
   };
 
   if (loading) {
@@ -51,7 +84,7 @@ export default function EmailList({ emails, loading }) {
         <span>Recent Broadcasts</span>
         <span className="text-sm font-normal text-gray-500">{emails.length} total</span>
       </h3>
-      
+
       {emails.length === 0 ? (
         <div className="text-center text-gray-500 py-12">
           <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,7 +104,7 @@ export default function EmailList({ emails, loading }) {
               <div className="flex justify-between items-start">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">
+                    <span className="text-sm font-medium truncate text-gray-600">
                       {email.content?.subject || 'No Subject'}
                     </span>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusColor(email.status)}`}>
@@ -84,7 +117,7 @@ export default function EmailList({ emails, loading }) {
                       <span>📅 {formatDate(email.scheduledTime)}</span>
                     )}
                     {email.sentAt && (
-                      <span>✅ Sent {formatDate(email.sentAt)}</span>
+                      <span>✅ {formatDate(email.sentAt)}</span>
                     )}
                   </div>
                 </div>

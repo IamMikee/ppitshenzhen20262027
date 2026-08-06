@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function ContentEditor({ content, onContentChange, useHTML = false }) {
+export default function ContentEditor({ content, onContentChange }) {
     const [mode, setMode] = useState('text');
 
     const handleTextChange = (e) => {
@@ -20,7 +20,6 @@ export default function ContentEditor({ content, onContentChange, useHTML = fals
             onContentChange({
                 ...content,
                 text: text,
-                html: text, // Store raw for HTML mode
             });
         };
         reader.readAsText(file);
@@ -33,22 +32,20 @@ export default function ContentEditor({ content, onContentChange, useHTML = fals
                 <button
                     type="button"
                     onClick={() => setMode('text')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        mode === 'text'
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'text'
                             ? 'bg-blue-600 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                        }`}
                 >
-                    {useHTML ? 'Paste HTML' : 'Paste Text'}
+                    Paste Text
                 </button>
                 <button
                     type="button"
                     onClick={() => setMode('file')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        mode === 'file'
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'file'
                             ? 'bg-blue-600 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                        }`}
                 >
                     Upload File
                 </button>
@@ -59,32 +56,19 @@ export default function ContentEditor({ content, onContentChange, useHTML = fals
                     <input
                         type="text"
                         name="subject"
-                        value={content.subject || ''}
+                        value={content.subject || ""}
                         onChange={handleTextChange}
                         placeholder="Email Subject"
-                        className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600 font-semibold"
                     />
-                    {useHTML ? (
-                        // HTML editor mode
-                        <textarea
-                            name="text"
-                            value={content.text || ''}
-                            onChange={handleTextChange}
-                            placeholder="Paste your HTML code here..."
-                            rows={10}
-                            className="w-full border rounded-md px-3 py-2 text-sm font-mono resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    ) : (
-                        // Regular text mode
-                        <textarea
-                            name="text"
-                            value={content.text || ''}
-                            onChange={handleTextChange}
-                            placeholder="Paste your email content here..."
-                            rows={6}
-                            className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    )}
+                    <textarea
+                        name="text"
+                        value={content.text || ''}
+                        onChange={handleTextChange}
+                        placeholder="Paste your email content here..."
+                        rows={6}
+                        className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600"
+                    />
                 </div>
             )}
 
@@ -92,7 +76,7 @@ export default function ContentEditor({ content, onContentChange, useHTML = fals
                 <div className="space-y-3">
                     <input
                         type="file"
-                        accept=".txt,.doc,.docx,.html"
+                        accept=".txt,.doc,.docx"
                         onChange={handleFileUpload}
                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
