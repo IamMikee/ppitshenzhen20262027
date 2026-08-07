@@ -11,7 +11,6 @@ export default function SchedulePicker({
 }) {
   const [date, setDate] = useState('');
 
-  // ✅ Format the selected date for display
   const formatDisplayDate = (dateStr) => {
     if (!dateStr) return '';
     const [year, month, day] = dateStr.split('-');
@@ -41,7 +40,7 @@ export default function SchedulePicker({
             onChange={() => {
               onSendNowChange(true);
               onScheduledTimeChange(null);
-              setDate(''); // ✅ Clear date when switching to Send Now
+              setDate('');
             }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
