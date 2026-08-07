@@ -4,6 +4,7 @@ import { useState } from 'react';
 import RecipientSelector from './RecipientSelector';
 import ContentEditor from './ContentEditor';
 import SchedulePicker from './SchedulePicker';
+import { uploadFileToCloudinary } from '../../../services/cloudinary';
 
 export default function EmailForm({ onSuccess }) {
     const [recipients, setRecipients] = useState([]);
@@ -13,7 +14,7 @@ export default function EmailForm({ onSuccess }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    
+
     const [sendIndividually, setSendIndividually] = useState(false);
 
     const handleSubmit = async (e) => {
@@ -28,7 +29,7 @@ export default function EmailForm({ onSuccess }) {
                 throw new Error('Please select at least one recipient');
             }
 
-            if (!content.text && !content.html) {
+            if (!content.text) {
                 throw new Error('Please provide email content');
             }
 
@@ -36,13 +37,36 @@ export default function EmailForm({ onSuccess }) {
                 throw new Error('Please select a send time or send now');
             }
 
-            // Prepare content based on HTML toggle
+            // Upload attachments to Cloudinary
+            let uploadedAttachments = [];
+            const attachmentFiles = content.attachmentFiles || [];
+
+            if (attachmentFiles.length > 0) {
+                for (const file of attachmentFiles) {
+                    try {
+                        const result = await uploadFileToCloudinary(file, 'email-attachments');
+                        uploadedAttachments.push({
+                            name: file.name,
+                            size: file.size,
+                            type: file.type,
+                            cloudinaryUrl: result.url,
+                            publicId: result.publicId,
+                        });
+                    } catch (error) {
+                        throw new Error(`Failed to upload ${file.name}: ${error.message}`);
+                    }
+                }
+            }
+
+            // Prepare email content with attachment metadata
             const emailContent = {
                 subject: content.subject,
-                text: content.text, // Plain text
-                html: content.text.replace(/\n/g, '<br>'), // HTML version
+                text: content.text,
+                html: content.text.replace(/\n/g, '<br>'),
+                attachments: uploadedAttachments, // Cloudinary URLs stored in Firestore
             };
 
+            // Send the email
             const response = await fetch('/api/emails', {
                 method: 'POST',
                 headers: {
@@ -53,7 +77,12 @@ export default function EmailForm({ onSuccess }) {
                     content: emailContent,
                     scheduledTime: sendNow ? null : scheduledTime,
                     sendNow,
-                    sendIndividually, // Send individually toggle
+                    sendIndividually,
+                    attachmentFiles: uploadedAttachments.map(a => ({
+                        name: a.name,
+                        cloudinaryUrl: a.cloudinaryUrl,
+                        type: a.type,
+                    })),
                 }),
             });
 
@@ -65,15 +94,19 @@ export default function EmailForm({ onSuccess }) {
 
             // Reset form
             setRecipients([]);
-            setContent({ text: '', html: '', subject: '' });
+            setContent({
+                text: '',
+                subject: '',
+                attachments: [],
+                attachmentFiles: []
+            });
             setScheduledTime(null);
             setSendNow(false);
             setSendIndividually(false);
-            
+
             if (onSuccess) onSuccess();
-            
+
             setSuccess(data.message || 'Email processed successfully');
-            
             setTimeout(() => setSuccess(''), 5000);
         } catch (err) {
             setError(err.message);
@@ -94,14 +127,12 @@ export default function EmailForm({ onSuccess }) {
             <button
                 type="button"
                 onClick={() => onChange(!checked)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                    checked ? 'bg-blue-600' : 'bg-gray-300'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
             >
                 <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        checked ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                 />
             </button>
         </div>
@@ -139,7 +170,7 @@ export default function EmailForm({ onSuccess }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Send To <span className="text-red-500">*</span>
                 </label>
-                <RecipientSelector 
+                <RecipientSelector
                     selectedRecipients={recipients}
                     onRecipientsChange={setRecipients}
                 />
@@ -168,13 +199,13 @@ export default function EmailForm({ onSuccess }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Email Content <span className="text-red-500">*</span>
                 </label>
-                <ContentEditor 
+                <ContentEditor
                     content={content}
                     onContentChange={setContent}
                 />
                 {sendIndividually && (
                     <p className="mt-1 text-xs text-green-600">
-                        👤 Each recipient will receive a separate personalized email.
+                        👤 Send Individually enabled: Each recipient will receive a separate personalized email.
                     </p>
                 )}
             </div>
@@ -184,7 +215,7 @@ export default function EmailForm({ onSuccess }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Send Schedule <span className="text-red-500">*</span>
                 </label>
-                <SchedulePicker 
+                <SchedulePicker
                     sendNow={sendNow}
                     onSendNowChange={setSendNow}
                     scheduledTime={scheduledTime}

@@ -32,21 +32,15 @@ export default function EmailList({ emails, loading }) {
       let date;
       if (timestamp.seconds !== undefined && typeof timestamp.seconds === 'number') {
         date = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
-      }
-      else if (typeof timestamp.toDate === 'function') {
+      } else if (typeof timestamp.toDate === 'function') {
         date = timestamp.toDate();
-      }
-      else if (timestamp instanceof Date) {
+      } else if (timestamp instanceof Date) {
         date = timestamp;
-      }
-      else if (typeof timestamp === 'string') {
+      } else if (typeof timestamp === 'string') {
         date = new Date(timestamp);
-      }
-      else if (typeof timestamp === 'number') {
+      } else if (typeof timestamp === 'number') {
         date = timestamp > 10000000000 ? new Date(timestamp) : new Date(timestamp * 1000);
-      }
-      else {
-        console.warn('Unknown timestamp type:', timestamp);
+      } else {
         return 'N/A';
       }
 
@@ -61,8 +55,61 @@ export default function EmailList({ emails, loading }) {
         hour12: true
       });
     } catch (e) {
-      console.error('Error formatting date:', error);
       return 'N/A';
+    }
+  };
+
+  // Get file icon based on type
+  const getFileIcon = (fileName, fileType) => {
+    const ext = fileName?.split('.').pop()?.toLowerCase() || '';
+
+    if (fileType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+      return '🖼️';
+    }
+    if (fileType?.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
+      return '🎬';
+    }
+    if (fileType?.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'aac'].includes(ext)) {
+      return '🎵';
+    }
+    if (fileType?.includes('pdf') || ext === 'pdf') {
+      return '📄';
+    }
+    if (fileType?.includes('word') || fileType?.includes('document') || ['doc', 'docx'].includes(ext)) {
+      return '📝';
+    }
+    if (fileType?.includes('excel') || fileType?.includes('sheet') || ['xls', 'xlsx', 'csv'].includes(ext)) {
+      return '📊';
+    }
+    if (fileType?.includes('presentation') || fileType?.includes('powerpoint') || ['ppt', 'pptx'].includes(ext)) {
+      return '📽️';
+    }
+    if (['zip', 'rar', '7z', 'gz', 'tar'].includes(ext)) {
+      return '📦';
+    }
+    return '📎';
+  };
+
+
+  // Get attachments from email content
+  const getAttachments = (email) => {
+    // Check multiple possible locations for attachments
+    if (email.content?.attachments && email.content.attachments.length > 0) {
+      return email.content.attachments;
+    }
+    if (email.attachmentFiles && email.attachmentFiles.length > 0) {
+      return email.attachmentFiles;
+    }
+    if (email.attachments && email.attachments.length > 0) {
+      return email.attachments;
+    }
+    return [];
+  };
+
+  // Handle attachment click - open in new tab
+  const handleAttachmentClick = (url) => {
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -95,63 +142,128 @@ export default function EmailList({ emails, loading }) {
         </div>
       ) : (
         <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-          {emails.map((email) => (
-            <div
-              key={email.id}
-              className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-              onClick={() => setExpandedId(expandedId === email.id ? null : email.id)}
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate text-gray-600">
-                      {email.content?.subject || 'No Subject'}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusColor(email.status)}`}>
-                      {getStatusIcon(email.status)} {email.status || 'pending'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                    <span>👥 {email.recipients?.length || 0} recipients</span>
-                    {email.scheduledTime && (
-                      <span>📅 {formatDate(email.scheduledTime)}</span>
-                    )}
-                    {email.sentAt && (
-                      <span>✅ {formatDate(email.sentAt)}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                  {formatDate(email.createdAt)}
-                </div>
-              </div>
+          {emails.map((email) => {
+            const attachments = getAttachments(email);
+            const hasAttachments = attachments.length > 0;
 
-              {expandedId === email.id && (
-                <div className="mt-3 pt-3 border-t text-sm space-y-2">
-                  <div>
-                    <strong className="text-gray-700">Recipients:</strong>
-                    <div className="max-h-24 overflow-y-auto text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded break-all">
-                      {email.recipients?.join(', ')}
+            return (
+              <div
+                key={email.id}
+                className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => setExpandedId(expandedId === email.id ? null : email.id)}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium truncate flex-1 text-gray-600">
+                        {email.content?.subject || 'No Subject'}
+                      </span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${getStatusColor(email.status)}`}>
+                        {getStatusIcon(email.status)} {email.status || 'pending'}
+                      </span>
                     </div>
-                  </div>
-                  <div>
-                    <strong className="text-gray-700">Content Preview:</strong>
-                    <div className="text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">
-                      {email.content?.text?.substring(0, 300)}
-                      {email.content?.text?.length > 300 && (
-                        <span className="text-gray-400">... (truncated)</span>
+                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                      <span>👥 {email.recipients?.length || 0} recipients</span>
+                      {hasAttachments && (
+                        <span>📎 {attachments.length} attachment(s)</span>
+                      )}
+                      {email.scheduledTime && (
+                        <span>📅 {formatDate(email.scheduledTime)}</span>
+                      )}
+                      {email.sentAt && (
+                        <span>{formatDate(email.sentAt)}</span>
                       )}
                     </div>
                   </div>
-                  {email.error && (
-                    <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
-                      ❌ Error: {email.error}
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                    {formatDate(email.createdAt)}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {expandedId === email.id && (
+                  <div className="mt-3 pt-3 border-t text-sm space-y-2">
+                    {/* Subject */}
+                    <div>
+                      <strong className="text-gray-800">Subject:</strong>
+                      <span className="text-gray-600 ml-1">{email.content?.subject || 'No Subject'}</span>
+                    </div>
+
+                    {/* Recipients */}
+                    <div>
+                      <strong className="text-gray-700">Recipients:</strong>
+                      <div className="max-h-24 overflow-y-auto text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded break-all">
+                        {email.recipients?.join(', ')}
+                      </div>
+                    </div>
+
+                    {/* Attachments Section */}
+                    {hasAttachments && (
+                      <div>
+                        <strong className="text-gray-700">Attachments:</strong>
+                        <div className="mt-1 space-y-1">
+                          {attachments.map((att, index) => {
+                            const fileUrl = att.cloudinaryUrl || att.url;
+                            const fileName = att.name || `Attachment ${index + 1}`;
+                            const fileType = att.type || '';
+
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2 p-2 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors group"
+                              >
+                                <span className="text-lg">{getFileIcon(fileName, fileType)}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-700 truncate">
+                                    {fileName}
+                                  </p>
+                                </div>
+                                {fileUrl ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAttachmentClick(fileUrl);
+                                    }}
+                                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex-shrink-0"
+                                  >
+                                    View
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400 flex-shrink-0">
+                                    No preview
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Content Preview */}
+                    <div>
+                      <strong className="text-gray-700">Content Preview:</strong>
+                      <div className="text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">
+                        {email.content?.text?.substring(0, 300)}
+                        {email.content?.text?.length > 300 && (
+                          <span className="text-gray-400">... (truncated)</span>
+                        )}
+                        {!email.content?.text && (
+                          <span className="text-gray-400">No content</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Error */}
+                    {email.error && (
+                      <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                        ❌ Error: {email.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
