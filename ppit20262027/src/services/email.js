@@ -26,9 +26,21 @@ const USERS_COLLECTION = 'users';
 
 export async function createEmailSend(emailData) {
     try {
+        let scheduledTime = emailData.scheduledTime;
+        
+        if (scheduledTime && typeof scheduledTime === 'object' && scheduledTime.seconds !== undefined) {
+            // Convert serialized Map to Timestamp
+            scheduledTime = new Timestamp(scheduledTime.seconds, scheduledTime.nanoseconds || 0);
+        } else if (scheduledTime instanceof Date) {
+            scheduledTime = Timestamp.fromDate(scheduledTime);
+        } else if (typeof scheduledTime === 'string') {
+            scheduledTime = Timestamp.fromDate(new Date(scheduledTime));
+        }
+        
         const docRef = await addDoc(collection(db, EMAIL_SENDS_COLLECTION), {
             ...emailData,
-            status: emailData.scheduledTime ? 'scheduled' : 'pending',
+            scheduledTime: scheduledTime,
+            status: scheduledTime ? 'scheduled' : 'pending',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
@@ -89,20 +101,35 @@ export async function updateEmailStatus(emailId, status, error = null) {
 
 export async function getScheduledEmails(currentTime) {
     try {
+        // Convert Date to Timestamp for Firestore query
+        const timestamp = Timestamp.fromDate(currentTime);
+        
+        console.log(`Querying for scheduled emails <= ${timestamp.seconds} (${currentTime.toISOString()})`);
+        
         const q = query(
             collection(db, EMAIL_SENDS_COLLECTION),
             where('status', '==', 'scheduled'),
-            where('scheduledTime', '<=', currentTime)
+            where('scheduledTime', '<=', timestamp)
         );
         const querySnapshot = await getDocs(q);
+        
+        console.log(`Found ${querySnapshot.size} scheduled emails due`);
+        
         const emails = [];
         querySnapshot.forEach((doc) => {
-            emails.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            const scheduledTime = data.scheduledTime?.toDate?.() || new Date(data.scheduledTime);
+            console.log(`Email: ${data.content?.subject}, scheduled: ${scheduledTime.toISOString()}`);
+            emails.push({ 
+                id: doc.id, 
+                ...data,
+                scheduledTime: scheduledTime // Convert to Date for easier handling
+            });
         });
         return emails;
     } catch (error) {
         console.error('Error fetching scheduled emails:', error);
-        throw error;
+        return [];
     }
 }
 
@@ -256,7 +283,7 @@ export async function saveBirthdayTemplate(templateData) {
 // SEND EMAILS (NO PERSONALIZATION FOR BROADCAST)
 // ============================================================
 
-export async function sendEmails(recipients, content, emailId, type = 'broadcast', individually = false) {
+export async function sendEmails(recipients, content, emailId, type = 'broadcast', individually = false, attachmentFiles = []) {
     try {
         await updateEmailStatus(emailId, 'sending');
 
@@ -267,6 +294,7 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
             text: content.text || '',
             type: type,
             individually: individually,
+            attachmentFiles: attachmentFiles
         };
 
         if (individually) {
@@ -404,31 +432,36 @@ export async function processBirthdayEmails() {
 // ============================================================
 // SCHEDULED EMAIL PROCESSING
 // ============================================================
-
 export async function processScheduledEmails() {
     try {
         const now = new Date();
+        console.log(`Checking scheduled emails at ${now.toISOString()}`);
+        
+        // Get all due scheduled emails
         const scheduledEmails = await getScheduledEmails(now);
+        console.log(`Found ${scheduledEmails.length} scheduled emails due`);
         
         let processed = 0;
         for (const email of scheduledEmails) {
-            const scheduledTime = email.scheduledTime.toDate ? 
-                email.scheduledTime.toDate() : new Date(email.scheduledTime);
-            
-            if (scheduledTime.getHours() === now.getHours() && 
-                scheduledTime.getDate() === now.getDate() &&
-                scheduledTime.getMonth() === now.getMonth() &&
-                scheduledTime.getFullYear() === now.getFullYear()) {
+            try {
+                console.log(`Sending: ${email.content?.subject} (${email.recipients?.length || 0} recipients)`);
+                
                 await sendEmails(
                     email.recipients, 
                     email.content, 
                     email.id, 
                     email.type || 'broadcast',
-                    email.sendIndividually || false
+                    email.sendIndividually || false,
+                    email.attachmentFiles || []
                 );
                 processed++;
+                console.log(`✅ Sent email ${email.id}`);
+            } catch (error) {
+                console.error(`❌ Failed to send email ${email.id}:`, error);
             }
         }
+        
+        console.log(`Processed ${processed} scheduled emails`);
         return { processed };
     } catch (error) {
         console.error('Error processing scheduled emails:', error);

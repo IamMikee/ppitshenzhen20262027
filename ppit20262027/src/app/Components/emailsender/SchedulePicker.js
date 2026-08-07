@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Timestamp } from 'firebase/firestore';
 
 export default function SchedulePicker({
   sendNow,
@@ -9,17 +10,29 @@ export default function SchedulePicker({
   onScheduledTimeChange,
 }) {
   const [date, setDate] = useState('');
-  const [hour, setHour] = useState('');
 
-  const handleScheduleChange = () => {
-    if (date && hour !== '') {
-      const [year, month, day] = date.split('-');
-      const scheduledDate = new Date(year, month - 1, day, parseInt(hour), 0, 0);
-      onScheduledTimeChange(scheduledDate.toISOString());
+  const formatDate = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const d = new Date(timestamp);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Singapore'
+      });
+    } catch {
+      return '';
     }
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleString('en-US', {
+    timeZone: 'Asia/Singapore',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).split('/').reverse().join('-');
 
   return (
     <div className="space-y-3">
@@ -56,35 +69,24 @@ export default function SchedulePicker({
                 type="date"
                 value={date}
                 onChange={(e) => {
-                  setDate(e.target.value);
-                  setTimeout(handleScheduleChange, 100);
+                  const selectedDate = e.target.value;
+                  setDate(selectedDate);
+
+                  if (selectedDate) {
+                    const [year, month, day] = selectedDate.split('-');
+                    const scheduledDate = new Date(`${year}-${month}-${day}T08:00:00+08:00`);
+                    const timestamp = Timestamp.fromDate(scheduledDate);
+                    onScheduledTimeChange(timestamp); 
+                  }
                 }}
                 className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-500"
                 min={today}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600 font-medium">Hour:</label>
-              <select
-                value={hour}
-                onChange={(e) => {
-                  setHour(e.target.value);
-                  setTimeout(handleScheduleChange, 100);
-                }}
-                className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-500"
-              >
-                <option value="">Select hour</option>
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {i.toString().padStart(2, '0')}:00
-                  </option>
-                ))}
-              </select>
-            </div>
+            <p className="text-xs text-gray-500">
+              Reminder: scheduled emails are sent daily at <b>8:00 AM (GMT+8)</b>
+            </p>
           </div>
-          <p className="text-xs text-gray-500">
-            ⏰ Emails are sent at the beginning of the hour (XX:00:00)
-          </p>
         </div>
       )}
 
@@ -94,7 +96,7 @@ export default function SchedulePicker({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Scheduled for: <strong>{new Date(scheduledTime).toLocaleString()}</strong>
+            Scheduled for: <strong>{formatDate(scheduledTime)} at 8:00 AM (GMT+8)</strong>
           </p>
         </div>
       )}

@@ -1,12 +1,13 @@
-// src/app/api/emails/route.js
 import { NextResponse } from 'next/server';
 import { 
     getEmailSends, 
     getAllRecipients, 
     getBirthdayTemplates,
     createEmailSend,
-    sendEmails
+    sendEmails,
+    updateEmailStatus
 } from '../../../services/email';
+import { uploadFileToCloudinary } from '../../../services/cloudinary';
 
 // ============================================================
 // GET /api/emails
@@ -61,10 +62,11 @@ export async function GET(request) {
 // POST /api/emails
 // Body:
 //   - recipients: string[]
-//   - content: { subject, text, html, isHTML }
+//   - content: { subject, text, html, attachments }
 //   - scheduledTime: string | null
 //   - sendNow: boolean
 //   - sendIndividually: boolean
+//   - attachmentFiles: { name, cloudinaryUrl, type }[] (already uploaded)
 // ============================================================
 export async function POST(request) {
     try {
@@ -75,6 +77,7 @@ export async function POST(request) {
             scheduledTime, 
             sendNow,
             sendIndividually = false,
+            attachmentFiles = [],
         } = body;
 
         // Validate
@@ -92,15 +95,22 @@ export async function POST(request) {
             );
         }
 
-        // Prepare content based on HTML mode
+        // The attachmentFiles are passed from the client with Cloudinary URLs
+        const attachments = attachmentFiles.map(file => ({
+            name: file.name,
+            size: file.size || 0,
+            type: file.type || 'application/octet-stream',
+            cloudinaryUrl: file.cloudinaryUrl,
+            publicId: file.publicId || null,
+        }));
+
         const emailContent = {
-            to: recipients,
             subject: content.subject || 'Broadcast Email',
             text: content.text,
             html: content.text?.replace(/\n/g, '<br>') || '',
+            attachments: attachments, // Cloudinary URLs for storage
         };
 
-        // If sending individually, store flag
         const emailData = {
             recipients,
             content: emailContent,
@@ -109,13 +119,22 @@ export async function POST(request) {
             sendNow: sendNow || false,
             sendIndividually: sendIndividually,
             type: 'broadcast',
+            attachmentFiles: attachments, // Store attachment metadata
         };
 
         const result = await createEmailSend(emailData);
 
         // If send now, trigger immediate sending
         if (sendNow) {
-            await sendEmails(recipients, emailContent, result.id, 'broadcast', sendIndividually);
+            // Pass attachmentFiles to sendEmails for nodemailer
+            await sendEmails(
+                recipients, 
+                emailContent, 
+                result.id, 
+                'broadcast', 
+                sendIndividually,
+                attachments
+            );
         }
 
         const message = sendNow 
@@ -129,7 +148,8 @@ export async function POST(request) {
         return NextResponse.json({
             success: true,
             data: result,
-            message
+            message,
+            attachments: attachments, // Return attachment info
         });
 
     } catch (error) {
