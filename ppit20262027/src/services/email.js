@@ -297,7 +297,7 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
             attachmentFiles: attachmentFiles
         };
 
-        const apiUrl = 'api/emails/send';
+        const apiUrl = '/api/emails/send';
 
         if (individually) {
             const results = [];
@@ -334,7 +334,7 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
             return { results, successful: successful.length, failed: failed.length };
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/emails/send`, {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

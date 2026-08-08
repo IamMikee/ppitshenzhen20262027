@@ -4,7 +4,7 @@ import { updateEmailStatus } from '../../../../services/email';
 
 export async function POST(request) {
     try {
-        const { to, subject, html, text, emailId, attachmentFiles } = await request.json();
+        const { to, subject, html, text, emailId, attachmentFiles, isIndividual } = await request.json();
 
         if (!to || to.length === 0) {
             return NextResponse.json(
@@ -53,6 +53,7 @@ export async function POST(request) {
                 };
 
                 const info = await transporter.sendMail(mailOptions);
+                console.log(`✅ Sent email to ${recipient}, isIndividual: ${isIndividual}`);
                 return { 
                     recipient, 
                     success: true, 
