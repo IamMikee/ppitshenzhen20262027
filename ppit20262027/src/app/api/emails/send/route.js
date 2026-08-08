@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { updateEmailStatus } from '../../../../services/email';
 
+const MAX_RECIPIENTS_PER_EMAIL = 100;
+
 export async function POST(request) {
     try {
         const { to, subject, html, text, emailId, attachmentFiles, isIndividual } = await request.json();
@@ -21,28 +23,80 @@ export async function POST(request) {
             },
         });
 
-        const sendPromises = to.map(async (recipient) => {
-            try {
-                const attachments = [];
-                if (attachmentFiles && attachmentFiles.length > 0) {
-                    for (const file of attachmentFiles) {
-                        try {
-                            const response = await fetch(file.cloudinaryUrl || file.url);
-                            if (!response.ok) throw new Error(`Failed to download ${file.name}`);
-                            
-                            const buffer = await response.arrayBuffer();
-                            attachments.push({
-                                filename: file.name,
-                                content: Buffer.from(buffer),
-                                contentType: file.type || 'application/octet-stream',
-                            });
-                        } catch (error) {
-                            console.error(`Failed to download ${file.name}:`, error);
-                            // Continue without this attachment
-                        }
+        const buildAttachments = async () => {
+            const attachments = [];
+            if (attachmentFiles && attachmentFiles.length > 0) {
+                for (const file of attachmentFiles) {
+                    try {
+                        const response = await fetch(file.cloudinaryUrl || file.url);
+                        if (!response.ok) throw new Error(`Failed to download ${file.name}`);
+                        const buffer = await response.arrayBuffer();
+                        attachments.push({
+                            filename: file.name,
+                            content: Buffer.from(buffer),
+                            contentType: file.type || 'application/octet-stream',
+                        });
+                    } catch (error) {
+                        console.error(`Failed to download ${file.name}:`, error);
                     }
                 }
+            }
+            return attachments;
+        };
 
+        const attachments = await buildAttachments();
+
+        if (isIndividual === false) {
+            // Split recipients into batches of 100
+            const batches = [];
+            for (let i = 0; i < to.length; i += MAX_RECIPIENTS_PER_EMAIL) {
+                batches.push(to.slice(i, i + MAX_RECIPIENTS_PER_EMAIL));
+            }
+
+            console.log(`📧 Sending ${to.length} recipients in ${batches.length} batches`);
+
+            let totalSent = 0;
+
+            for (let i = 0; i < batches.length; i++) {
+                const batch = batches[i];
+                try {
+                    const mailOptions = {
+                        from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
+                        to: process.env.GMAIL_USER,
+                        bcc: batch,
+                        subject: subject || 'Broadcast Email',
+                        text: text || '',
+                        html: html || text?.replace(/\n/g, '<br>') || '',
+                        attachments: attachments,
+                    };
+
+                    const info = await transporter.sendMail(mailOptions);
+                    totalSent += batch.length;
+                    console.log(`✅ Batch ${i + 1}/${batches.length}: Sent to ${batch.length} recipients (BCC)`);
+                } catch (error) {
+                    console.error(`❌ Batch ${i + 1} failed:`, error);
+                    // Continue with next batch
+                }
+            }
+
+            console.log(`✅ Sent bulk email to ${totalSent} recipients in ${batches.length} batches (BCC)`);
+
+            if (emailId) {
+                await updateEmailStatus(emailId, 'sent');
+            }
+
+            return NextResponse.json({
+                success: true,
+                message: `Sent to ${totalSent} recipients in ${batches.length} batches (BCC)`,
+                results: {
+                    successful: totalSent,
+                    failed: to.length - totalSent,
+                }
+            });
+        }
+
+        const sendPromises = to.map(async (recipient) => {
+            try {
                 const mailOptions = {
                     from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
                     to: recipient,
@@ -53,19 +107,11 @@ export async function POST(request) {
                 };
 
                 const info = await transporter.sendMail(mailOptions);
-                console.log(`✅ Sent email to ${recipient}, isIndividual: ${isIndividual}`);
-                return { 
-                    recipient, 
-                    success: true, 
-                    messageId: info.messageId 
-                };
+                console.log(`✅ Sent individual email to ${recipient}`);
+                return { recipient, success: true, messageId: info.messageId };
             } catch (error) {
                 console.error(`Failed to send to ${recipient}:`, error);
-                return { 
-                    recipient, 
-                    success: false, 
-                    error: error.message 
-                };
+                return { recipient, success: false, error: error.message };
             }
         });
 
@@ -87,12 +133,13 @@ export async function POST(request) {
 
         return NextResponse.json({
             success: true,
-            message: `Sent to ${successful.length} recipients`,
+            message: `Sent to ${successful.length} recipients individually`,
             results: {
                 successful: successful.length,
                 failed: failed.length,
             }
         });
+
     } catch (error) {
         console.error('Email sending error:', error);
         return NextResponse.json(
