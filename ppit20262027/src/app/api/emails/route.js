@@ -7,7 +7,6 @@ import {
     sendEmails,
     updateEmailStatus
 } from '../../../services/email';
-import { uploadFileToCloudinary } from '../../../services/cloudinary';
 
 // ============================================================
 // GET /api/emails
