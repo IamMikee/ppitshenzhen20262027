@@ -10,26 +10,30 @@ export default function SignatureEditor({
     isNew = false,
     onSave,
     onDiscard,
-    userId,
     isLoading = false,
 }) {
     const router = useRouter();
     const [formData, setFormData] = useState({
         name: '',
         html: '',
-        text: '',
         isActive: false,
     });
     const [showViewer, setShowViewer] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
     const [originalData, setOriginalData] = useState(null);
 
+    const getUserId = () => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('user-id') || 'unknown-user';
+        }
+        return 'unknown-user';
+    };
+
     useEffect(() => {
         if (initialData) {
             const data = {
                 name: initialData.name || '',
                 html: initialData.html || '',
-                text: initialData.text || '',
                 isActive: initialData.isActive || false,
             };
             setFormData(data);
@@ -51,7 +55,8 @@ export default function SignatureEditor({
             alert('Please add content to your signature.');
             return;
         }
-        await onSave(formData);
+        const userId = getUserId();
+        await onSave(formData, userId);
     };
 
     const handleDiscard = () => {
@@ -122,20 +127,6 @@ export default function SignatureEditor({
                     value={formData.html}
                     onChange={(html) => handleChange('html', html)}
                     placeholder="Write your signature here... Include your name, title, logo, links, etc."
-                />
-            </div>
-
-            {/* Plain text version */}
-            <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Plain Text Version <span className="text-xs text-gray-400">(for text-only emails)</span>
-                </label>
-                <textarea
-                    value={formData.text}
-                    onChange={(e) => handleChange('text', e.target.value)}
-                    rows={3}
-                    className="w-full border rounded-md px-3 py-2 text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    placeholder="Plain text version of your signature... (will be used for emails without HTML)"
                 />
             </div>
 

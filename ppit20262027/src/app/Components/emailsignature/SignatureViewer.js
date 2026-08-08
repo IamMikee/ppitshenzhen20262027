@@ -6,7 +6,6 @@ export default function SignatureViewer({ signature, onClose }) {
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
-        // Trigger animation
         requestAnimationFrame(() => setIsVisible(true));
     }, []);
 
@@ -28,7 +27,6 @@ export default function SignatureViewer({ signature, onClose }) {
                 onClick={(e) => e.stopPropagation()}
                 style={{ transform: isVisible ? 'scale(1)' : 'scale(0.95)', transition: 'transform 200ms' }}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
                     <div>
                         <h3 className="text-lg font-semibold text-gray-800">{signature.name}</h3>
@@ -49,13 +47,10 @@ export default function SignatureViewer({ signature, onClose }) {
 
                 {/* Email Preview */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    {/* Email Header */}
                     <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                         <p className="text-sm font-medium text-gray-600">Subject: <span className="font-normal text-gray-500">Example Email</span></p>
                         <p className="text-sm font-medium text-gray-600">Body:</p>
                     </div>
-
-                    {/* Email Body */}
                     <div className="p-4 min-h-[100px] bg-white">
                         <div className="text-sm text-gray-700">
                             <p>Hi there,</p>
@@ -65,7 +60,6 @@ export default function SignatureViewer({ signature, onClose }) {
                     </div>
                 </div>
 
-                {/* Close button */}
                 <div className="mt-4 flex justify-end">
                     <button
                         onClick={handleClose}

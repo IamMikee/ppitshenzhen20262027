@@ -15,6 +15,13 @@ export default function SignaturesPage() {
     const [signatures, setSignatures] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const getUserId = () => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('user-id') || 'unknown-user';
+        }
+        return 'unknown-user';
+    };
+
     useEffect(() => {
         fetchSignatures();
     }, []);
@@ -42,7 +49,8 @@ export default function SignaturesPage() {
 
     const handleSetActive = async (id) => {
         try {
-            await setActiveSignature(id, 'user-id'); // Replace with actual user ID
+            const userId = getUserId();
+            await setActiveSignature(id, userId);
             await fetchSignatures();
         } catch (error) {
             alert(error.message);
@@ -52,7 +60,7 @@ export default function SignaturesPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <div className="text-gray-500">Loading signatures...</div>
+                <div className="text-gray-300">Loading signatures...</div>
             </div>
         );
     }
@@ -64,7 +72,7 @@ export default function SignaturesPage() {
                 <div className="flex items-center gap-4">
                     <Link
                         href="/ctrlpanel/emailsender"
-                        className="text-gray-600 hover:text-gray-800 transition-colors"
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
                         title="Back to Email Sender"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,7 +80,7 @@ export default function SignaturesPage() {
                         </svg>
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">📝 Email Signatures</h1>
+                        <h1 className="text-2xl font-bold text-gray-200">📝 Email Signatures</h1>
                         <p className="text-sm text-gray-500">Create and manage email signatures for your broadcasts</p>
                     </div>
                 </div>
