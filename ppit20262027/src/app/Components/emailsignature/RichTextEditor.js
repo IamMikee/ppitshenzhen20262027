@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { uploadFileToCloudinary } from '@/services/cloudinary';
 
-export default function RichTextEditor({ value, onChange, placeholder = 'Write your signature here...' }) {
+export default function RichTextEditor({ value, onChange, placeholder = 'Write your signature here...', onImageInsert, pendingImages = [] }) {
     const editorRef = useRef(null);
     const popupRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -15,7 +15,6 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
     const [fontSize, setFontSize] = useState('3');
     const isInternalUpdate = useRef(false);
 
-    // ✅ Initialize editor content only once
     useEffect(() => {
         if (editorRef.current && !isInternalUpdate.current) {
             const currentContent = editorRef.current.innerHTML;
@@ -53,7 +52,6 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
         setIsEmpty(!hasText && !hasImages);
     };
 
-    // ✅ Handle input without cursor jump
     const handleInput = () => {
         if (editorRef.current) {
             const content = editorRef.current.innerHTML;
@@ -76,28 +74,25 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.onchange = async (e) => {
+        input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            setIsLoading(true);
-            try {
-                const result = await uploadFileToCloudinary(file, 'email-signatures');
-                const img = `<img src="${result.url}" alt="Signature image" data-size="100" style="max-width: 100%; height: auto; border-radius: 4px;" class="signature-image" />`;
-                document.execCommand('insertHTML', false, img);
-                handleInput();
-                setTimeout(applySizesFromAttributes, 50);
-            } catch (error) {
-                console.error('Failed to upload image:', error);
-                alert('Failed to upload image. Please try again.');
-            } finally {
-                setIsLoading(false);
+            const localUrl = URL.createObjectURL(file);
+
+            // Insert image with local URL and a data attribute
+            const img = `<img src="${localUrl}" alt="Signature image" data-size="100" data-local="true" style="max-width: 100%; height: auto; border-radius: 4px;" class="signature-image" />`;
+            document.execCommand('insertHTML', false, img);
+
+            if (onImageInsert) {
+                onImageInsert(file, localUrl);
             }
+
+            handleInput();
         };
         input.click();
     };
 
-    // ✅ Handle image click - using event delegation on the editor
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor) return;
@@ -160,7 +155,6 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
         setShowPopup(false);
     };
 
-    // ✅ Resize selected image
     const handleSizeChange = (e) => {
         const newSize = parseInt(e.target.value);
         setImageSize(newSize);
@@ -183,7 +177,6 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
         execCommand('fontSize', false, size);
     };
 
-    // ✅ Close popup on Escape key
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
@@ -194,7 +187,6 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Write y
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // ✅ Close popup when clicking outside
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (popupRef.current && !popupRef.current.contains(e.target) && !e.target.closest('.signature-image')) {
