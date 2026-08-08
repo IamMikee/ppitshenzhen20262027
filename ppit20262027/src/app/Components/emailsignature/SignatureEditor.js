@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import RichTextEditor from './RichTextEditor';
 import SignatureViewer from './SignatureViewer';
+import { uploadFileToCloudinary } from '@/services/cloudinary';
 
 export default function SignatureEditor({
     initialData,
@@ -21,6 +22,7 @@ export default function SignatureEditor({
     const [showViewer, setShowViewer] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
     const [originalData, setOriginalData] = useState(null);
+    const [pendingImages, setPendingImages] = useState([]);
 
     const getUserId = () => {
         if (typeof window !== 'undefined') {
@@ -46,6 +48,31 @@ export default function SignatureEditor({
         setHasChanges(true);
     };
 
+    const handleHtmlChange = (html) => {
+        setFormData(prev => ({ ...prev, html }));
+        setHasChanges(true);
+    };
+
+    const uploadPendingImages = async (html) => {
+        if (pendingImages.length === 0) return html;
+
+        let updatedHtml = html;
+        const uploadPromises = pendingImages.map(async (imgData) => {
+            try {
+                const result = await uploadFileToCloudinary(imgData.file, 'email-signatures');
+                // Replace local blob URL with Cloudinary URL
+                updatedHtml = updatedHtml.replace(imgData.localUrl, result.url);
+                return { ...imgData, cloudinaryUrl: result.url, uploaded: true };
+            } catch (error) {
+                console.error('Failed to upload image:', error);
+                throw new Error(`Failed to upload image: ${imgData.file.name}`);
+            }
+        });
+
+        await Promise.all(uploadPromises);
+        return updatedHtml;
+    };
+
     const handleSave = async () => {
         if (!formData.name.trim()) {
             alert('Please enter a signature name.');
@@ -55,13 +82,39 @@ export default function SignatureEditor({
             alert('Please add content to your signature.');
             return;
         }
-        const userId = getUserId();
-        await onSave(formData, userId);
+
+        try {
+            let finalHtml = formData.html;
+            if (pendingImages.length > 0) {
+                finalHtml = await uploadPendingImages(formData.html);
+            }
+
+            const userId = getUserId();
+            await onSave({ ...formData, html: finalHtml }, userId);
+            
+            // Clear pending images after successful save
+            setPendingImages([]);
+        } catch (error) {
+            alert('Failed to save signature: ' + error.message);
+        }
+    };
+
+    const handleImageInsert = (file, localUrl) => {
+        // Add to pending images list
+        setPendingImages(prev => [...prev, { file, localUrl, uploaded: false }]);
+        setHasChanges(true);
     };
 
     const handleDiscard = () => {
         if (hasChanges) {
             if (confirm('You have unsaved changes. Are you sure you want to discard them?')) {
+                // Clean up local URLs
+                pendingImages.forEach(img => {
+                    if (img.localUrl && img.localUrl.startsWith('blob:')) {
+                        URL.revokeObjectURL(img.localUrl);
+                    }
+                });
+                setPendingImages([]);
                 onDiscard();
             }
         } else {
@@ -95,6 +148,11 @@ export default function SignatureEditor({
                             Active
                         </span>
                     )}
+                    {pendingImages.length > 0 && (
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            {pendingImages.length} image(s) pending upload
+                        </span>
+                    )}
                 </div>
                 <button
                     onClick={() => setShowViewer(true)}
@@ -125,8 +183,10 @@ export default function SignatureEditor({
                 </label>
                 <RichTextEditor
                     value={formData.html}
-                    onChange={(html) => handleChange('html', html)}
+                    onChange={handleHtmlChange}
+                    onImageInsert={handleImageInsert}
                     placeholder="Write your signature here... Include your name, title, logo, links, etc."
+                    pendingImages={pendingImages}
                 />
             </div>
 
