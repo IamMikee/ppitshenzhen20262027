@@ -283,7 +283,7 @@ export async function saveBirthdayTemplate(templateData) {
 // SEND EMAILS (NO PERSONALIZATION FOR BROADCAST)
 // ============================================================
 
-export async function sendEmails(recipients, content, emailId, type = 'broadcast', individually = false, attachmentFiles = []) {
+export async function sendEmails(recipients, content, emailId, type = 'broadcast', individually = false, attachmentFiles = [], origin = null) {
     try {
         await updateEmailStatus(emailId, 'sending');
 
@@ -297,7 +297,8 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
             attachmentFiles: attachmentFiles
         };
 
-        const apiUrl = '/api/emails/send';
+        const baseUrl = origin;
+        const apiUrl = `${baseUrl}/api/emails/send`;
 
         if (individually) {
             const results = [];

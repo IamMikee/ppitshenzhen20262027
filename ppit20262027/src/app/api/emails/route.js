@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { 
-    getEmailSends, 
-    getAllRecipients, 
+import {
+    getEmailSends,
+    getAllRecipients,
     getBirthdayTemplates,
     createEmailSend,
     sendEmails,
@@ -26,18 +26,18 @@ export async function GET(request) {
         // Get recipients (with optional cohort filter)
         if (type === 'recipients') {
             const recipients = await getAllRecipients(cohort);
-            return NextResponse.json({ 
-                success: true, 
-                recipients 
+            return NextResponse.json({
+                success: true,
+                recipients
             });
         }
 
         // Get birthday templates
         if (type === 'birthday-templates') {
             const templates = await getBirthdayTemplates();
-            return NextResponse.json({ 
-                success: true, 
-                templates 
+            return NextResponse.json({
+                success: true,
+                templates
             });
         }
 
@@ -69,11 +69,17 @@ export async function GET(request) {
 // ============================================================
 export async function POST(request) {
     try {
+        const host = request.headers.get('host') || 'ppitshenzhen.org';
+        const origin = request.headers.get('origin') ||
+            (process.env.NODE_ENV === 'production'
+                ? `https://${host}`
+                : `http://localhost:3000`);
+
         const body = await request.json();
-        const { 
-            recipients, 
-            content, 
-            scheduledTime, 
+        const {
+            recipients,
+            content,
+            scheduledTime,
             sendNow,
             sendIndividually = false,
             attachmentFiles = [],
@@ -127,21 +133,22 @@ export async function POST(request) {
         if (sendNow) {
             // Pass attachmentFiles to sendEmails for nodemailer
             await sendEmails(
-                recipients, 
-                emailContent, 
-                result.id, 
-                'broadcast', 
+                recipients,
+                emailContent,
+                result.id,
+                'broadcast',
                 sendIndividually,
-                attachments
+                attachments,
+                origin
             );
         }
 
-        const message = sendNow 
-            ? (sendIndividually 
-                ? `${recipients.length} emails sent individually` 
+        const message = sendNow
+            ? (sendIndividually
+                ? `${recipients.length} emails sent individually`
                 : 'Email sent successfully')
-            : (sendIndividually 
-                ? `${recipients.length} emails scheduled individually` 
+            : (sendIndividually
+                ? `${recipients.length} emails scheduled individually`
                 : 'Email scheduled successfully');
 
         return NextResponse.json({
