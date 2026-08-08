@@ -12,6 +12,13 @@ export default function EditSignaturePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    const getUserId = () => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('user-id') || 'unknown-user';
+        }
+        return 'unknown-user';
+    };
+
     useEffect(() => {
         const fetchSignature = async () => {
             try {
@@ -31,10 +38,10 @@ export default function EditSignaturePage() {
         fetchSignature();
     }, [params.signId, router]);
 
-    const handleSave = async (formData) => {
+    const handleSave = async (formData, userId) => {
         setSaving(true);
         try {
-            await updateSignature(params.signId, formData, 'user-id'); // Replace with actual user ID
+            await updateSignature(params.signId, formData, userId || getUserId());
             router.push('/ctrlpanel/emailsender/signatures');
         } catch (error) {
             alert('Failed to save signature: ' + error.message);
@@ -64,7 +71,6 @@ export default function EditSignaturePage() {
                 isNew={false}
                 onSave={handleSave}
                 onDiscard={handleDiscard}
-                userId="user-id" // Replace with actual user ID
                 isLoading={saving}
             />
         </div>

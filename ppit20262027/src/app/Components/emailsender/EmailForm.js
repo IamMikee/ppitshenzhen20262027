@@ -6,6 +6,7 @@ import ContentEditor from './ContentEditor';
 import SchedulePicker from './SchedulePicker';
 import { uploadFileToCloudinary } from '../../../services/cloudinary';
 import { getActiveSignature } from '../../../services/emailSignature';
+import Link from 'next/link';
 
 export default function EmailForm({ onSuccess }) {
     const [recipients, setRecipients] = useState([]);
@@ -71,11 +72,15 @@ export default function EmailForm({ onSuccess }) {
             const activeSignature = await getActiveSignature();
 
             if (activeSignature) {
-                const isHTML = /<[a-z][\s\S]*>/i.test(content.text);
-                const htmlContent = isHTML ? content.text : content.text.replace(/\n/g, '<br>');
+                const isHTML = /<[^>]*>/i.test(content.text);
 
-                emailContent.text = content.text + (isHTML ? activeSignature.html : activeSignature.text);
-                emailContent.html = htmlContent + activeSignature.html;
+                if (!isHTML) {
+                    const spacing = "\n\n";
+                    const htmlContent = content.text.replace(/\n/g, '<br>');
+
+                    emailContent.text = content.text + spacing + activeSignature.html;
+                    emailContent.html = htmlContent + '<br><br>' + activeSignature.html;
+                }
             }
 
             // Send the email
@@ -158,6 +163,16 @@ export default function EmailForm({ onSuccess }) {
                 </svg>
                 Compose Email
             </h2>
+
+            <Link
+                href="/ctrlpanel/emailsender/signatures"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all"
+            >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                Manage Signatures
+            </Link>
 
             {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md flex items-start gap-2">

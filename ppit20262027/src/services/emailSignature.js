@@ -11,7 +11,8 @@ import {
     where,
     orderBy,
     serverTimestamp,
-    Timestamp
+    Timestamp,
+    limit
 } from 'firebase/firestore';
 
 const COLLECTION = 'emailSettings';
@@ -82,9 +83,10 @@ export async function createSignature(data, userId) {
         const isFirst = existing.length === 0;
 
         const docRef = await addDoc(collection(db, COLLECTION), {
-            ...data,
+            name: data.name,
+            html: data.html,
             type: 'signature',
-            isActive: isFirst ? true : false,
+            isActive: isFirst ? true : data.isActive || false,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
             createdBy: userId,

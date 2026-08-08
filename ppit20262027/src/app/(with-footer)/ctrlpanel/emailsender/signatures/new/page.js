@@ -2,17 +2,24 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createSignature } from '../../../../../../../services/emailSignature';
-import SignatureEditor from '../../../../../../Components/emailsignature/SignatureEditor';
+import { createSignature } from '../../../../../../services/emailSignature';
+import SignatureEditor from '../../../../../Components/emailsignature/SignatureEditor';
 
 export default function NewSignaturePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
 
-    const handleSave = async (formData) => {
+    const getUserId = () => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('user-id') || 'unknown-user';
+        }
+        return 'unknown-user';
+    };
+
+    const handleSave = async (formData, userId) => {
         setSaving(true);
         try {
-            await createSignature(formData, 'user-id'); // Replace with actual user ID
+            await createSignature(formData, userId || getUserId());
             router.push('/ctrlpanel/emailsender/signatures');
         } catch (error) {
             alert('Failed to create signature: ' + error.message);
@@ -31,7 +38,6 @@ export default function NewSignaturePage() {
                 isNew={true}
                 onSave={handleSave}
                 onDiscard={handleDiscard}
-                userId="user-id" // Replace with actual user ID
                 isLoading={saving}
             />
         </div>
