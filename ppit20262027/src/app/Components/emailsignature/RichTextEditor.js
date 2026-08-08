@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { uploadFileToCloudinary } from '@/services/cloudinary';
 
 export default function RichTextEditor({ value, onChange, placeholder = 'Write your signature here...', onImageInsert, pendingImages = [] }) {
     const editorRef = useRef(null);

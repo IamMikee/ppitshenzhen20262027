@@ -44,7 +44,7 @@ export default function AdminStatusPage() {
         const allUsersList = await getAllUsers();
         setTimeout(() => {
             for (let userObj of allUsersList) {
-                if (userObj.email == selectedEmail) {
+                if (userObj.email == selectedEmail.toLowerCase()) {
                     setUserFound(userObj);
                     setLoading(false);
                     return;
