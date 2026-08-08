@@ -5,6 +5,7 @@ import RecipientSelector from './RecipientSelector';
 import ContentEditor from './ContentEditor';
 import SchedulePicker from './SchedulePicker';
 import { uploadFileToCloudinary } from '../../../services/cloudinary';
+import { getActiveSignature } from '../../../services/emailSignature';
 
 export default function EmailForm({ onSuccess }) {
     const [recipients, setRecipients] = useState([]);
@@ -65,6 +66,17 @@ export default function EmailForm({ onSuccess }) {
                 html: content.text.replace(/\n/g, '<br>'),
                 attachments: uploadedAttachments, // Cloudinary URLs stored in Firestore
             };
+
+            //Attach signature (only if HTML is active)
+            const activeSignature = await getActiveSignature();
+
+            if (activeSignature) {
+                const isHTML = /<[a-z][\s\S]*>/i.test(content.text);
+                const htmlContent = isHTML ? content.text : content.text.replace(/\n/g, '<br>');
+
+                emailContent.text = content.text + (isHTML ? activeSignature.html : activeSignature.text);
+                emailContent.html = htmlContent + activeSignature.html;
+            }
 
             // Send the email
             const response = await fetch('/api/emails', {
