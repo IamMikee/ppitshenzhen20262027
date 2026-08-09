@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { updateEmailStatus } from '../../../../services/email';
 
-const MAX_RECIPIENTS_PER_EMAIL = 100;
+const MAX_RECIPIENTS_PER_EMAIL = 80;
+const DELAY_BETWEEN_BATCHES = 5000;
+const DELAY_BETWEEN_INDIVIDUAL = 2000;
 
 export async function POST(request) {
     try {
@@ -15,12 +17,17 @@ export async function POST(request) {
             );
         }
 
+        // Use connection pool (reuses the same connection)
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
                 user: process.env.GMAIL_USER,
                 pass: process.env.GMAIL_APP_PASSWORD,
             },
+            pool: true,      
+            maxConnections: 1,  
+            maxMessages: Infinity,
+            rateLimit: true,
         });
 
         const buildAttachments = async () => {
@@ -47,13 +54,13 @@ export async function POST(request) {
         const attachments = await buildAttachments();
 
         if (isIndividual === false) {
-            // Split recipients into batches of 100
+            // Split recipients into batches of 80
             const batches = [];
             for (let i = 0; i < to.length; i += MAX_RECIPIENTS_PER_EMAIL) {
                 batches.push(to.slice(i, i + MAX_RECIPIENTS_PER_EMAIL));
             }
 
-            console.log(`📧 Sending ${to.length} recipients in ${batches.length} batches`);
+            console.log(`📧 Sending ${to.length} recipients in ${batches.length} batches (max ${MAX_RECIPIENTS_PER_EMAIL} per batch)`);
 
             let totalSent = 0;
 
@@ -73,9 +80,19 @@ export async function POST(request) {
                     const info = await transporter.sendMail(mailOptions);
                     totalSent += batch.length;
                     console.log(`✅ Batch ${i + 1}/${batches.length}: Sent to ${batch.length} recipients (BCC)`);
+
+                    // FIX 2: Delay between batches
+                    if (i < batches.length - 1) {
+                        console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES}ms before next batch...`);
+                        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+                    }
                 } catch (error) {
                     console.error(`❌ Batch ${i + 1} failed:`, error);
-                    // Continue with next batch
+                    // If rate-limited, wait longer
+                    if (error.message?.includes('Too many login attempts')) {
+                        console.log('⏳ Rate limit hit, waiting 30 seconds...');
+                        await new Promise(resolve => setTimeout(resolve, 30000));
+                    }
                 }
             }
 
@@ -95,7 +112,10 @@ export async function POST(request) {
             });
         }
 
-        const sendPromises = to.map(async (recipient) => {
+        // INDIVIDUAL SEND - with delay between each email
+        const results = [];
+        for (let i = 0; i < to.length; i++) {
+            const recipient = to[i];
             try {
                 const mailOptions = {
                     from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
@@ -107,15 +127,23 @@ export async function POST(request) {
                 };
 
                 const info = await transporter.sendMail(mailOptions);
-                console.log(`✅ Sent individual email to ${recipient}`);
-                return { recipient, success: true, messageId: info.messageId };
+                console.log(`✅ Sent individual email to ${recipient} (${i + 1}/${to.length})`);
+                results.push({ recipient, success: true, messageId: info.messageId });
+
+                if (i < to.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_INDIVIDUAL));
+                }
             } catch (error) {
                 console.error(`Failed to send to ${recipient}:`, error);
-                return { recipient, success: false, error: error.message };
-            }
-        });
+                results.push({ recipient, success: false, error: error.message });
 
-        const results = await Promise.all(sendPromises);
+                if (error.message?.includes('Too many login attempts')) {
+                    console.log('⏳ Rate limit hit, waiting 30 seconds...');
+                    await new Promise(resolve => setTimeout(resolve, 30000));
+                }
+            }
+        }
+
         const successful = results.filter(r => r.success);
         const failed = results.filter(r => !r.success);
 
@@ -124,8 +152,8 @@ export async function POST(request) {
                 await updateEmailStatus(emailId, 'sent');
             } else {
                 await updateEmailStatus(
-                    emailId, 
-                    'sent', 
+                    emailId,
+                    'sent',
                     `${failed.length} recipients failed`
                 );
             }
