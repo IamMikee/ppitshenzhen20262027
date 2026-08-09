@@ -1,3 +1,4 @@
+// src/app/api/emails/send/route.js
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { updateEmailStatus } from '../../../../services/email';
@@ -5,6 +6,8 @@ import { updateEmailStatus } from '../../../../services/email';
 const MAX_RECIPIENTS_PER_EMAIL = 80;
 const DELAY_BETWEEN_BATCHES = 5000;
 const DELAY_BETWEEN_INDIVIDUAL = 2000;
+const RATE_LIMIT_WAIT = 30000;
+const MAX_RETRIES = 3;
 
 export async function POST(request) {
     try {
@@ -24,8 +27,8 @@ export async function POST(request) {
                 user: process.env.GMAIL_USER,
                 pass: process.env.GMAIL_APP_PASSWORD,
             },
-            pool: true,      
-            maxConnections: 1,  
+            pool: true,
+            maxConnections: 1,
             maxMessages: Infinity,
             rateLimit: true,
         });
@@ -53,6 +56,30 @@ export async function POST(request) {
 
         const attachments = await buildAttachments();
 
+        // Helper function to send with retry
+        const sendWithRetry = async (mailOptions, context) => {
+            let lastError = null;
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    const info = await transporter.sendMail(mailOptions);
+                    return { success: true, info };
+                } catch (error) {
+                    lastError = error;
+                    console.log(`⚠️ Attempt ${attempt}/${MAX_RETRIES} failed for ${context}:`, error.message);
+
+                    if (error.message?.includes('Too many login attempts')) {
+                        console.log(`⏳ Rate limit hit, waiting ${RATE_LIMIT_WAIT / 1000} seconds before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_WAIT));
+                    } else if (attempt < MAX_RETRIES) {
+                        const waitTime = attempt * 2000;
+                        console.log(`⏳ Waiting ${waitTime / 1000} seconds before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                    }
+                }
+            }
+            return { success: false, error: lastError };
+        };
+
         if (isIndividual === false) {
             // Split recipients into batches of 80
             const batches = [];
@@ -63,40 +90,41 @@ export async function POST(request) {
             console.log(`📧 Sending ${to.length} recipients in ${batches.length} batches (max ${MAX_RECIPIENTS_PER_EMAIL} per batch)`);
 
             let totalSent = 0;
+            let failedBatches = [];
 
             for (let i = 0; i < batches.length; i++) {
                 const batch = batches[i];
-                try {
-                    const mailOptions = {
-                        from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
-                        to: process.env.GMAIL_USER,
-                        bcc: batch,
-                        subject: subject || 'Broadcast Email',
-                        text: text || '',
-                        html: html || text?.replace(/\n/g, '<br>') || '',
-                        attachments: attachments,
-                    };
+                console.log(`📤 Processing batch ${i + 1}/${batches.length} with ${batch.length} recipients...`);
 
-                    const info = await transporter.sendMail(mailOptions);
+                const mailOptions = {
+                    from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
+                    to: process.env.GMAIL_USER,
+                    bcc: batch,
+                    subject: subject || 'Broadcast Email',
+                    text: text || '',
+                    html: html || text?.replace(/\n/g, '<br>') || '',
+                    attachments: attachments,
+                };
+
+                const result = await sendWithRetry(mailOptions, `batch ${i + 1}`);
+
+                if (result.success) {
                     totalSent += batch.length;
-                    console.log(`✅ Batch ${i + 1}/${batches.length}: Sent to ${batch.length} recipients (BCC)`);
+                    console.log(`✅ Batch ${i + 1}/${batches.length}: Successfully sent to ${batch.length} recipients (BCC)`);
+                } else {
+                    console.error(`❌ Batch ${i + 1}/${batches.length}: FAILED after ${MAX_RETRIES} attempts - ${result.error?.message || 'Unknown error'}`);
+                    failedBatches.push({ batchNumber: i + 1, count: batch.length, error: result.error?.message });
+                }
 
-                    // FIX 2: Delay between batches
-                    if (i < batches.length - 1) {
-                        console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES}ms before next batch...`);
-                        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
-                    }
-                } catch (error) {
-                    console.error(`❌ Batch ${i + 1} failed:`, error);
-                    // If rate-limited, wait longer
-                    if (error.message?.includes('Too many login attempts')) {
-                        console.log('⏳ Rate limit hit, waiting 30 seconds...');
-                        await new Promise(resolve => setTimeout(resolve, 30000));
-                    }
+                // Delay between batches
+                if (i < batches.length - 1) {
+                    console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES / 1000} seconds before next batch...`);
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
                 }
             }
 
-            console.log(`✅ Sent bulk email to ${totalSent} recipients in ${batches.length} batches (BCC)`);
+            const failedCount = failedBatches.reduce((sum, b) => sum + b.count, 0);
+            console.log(`📊 SUMMARY: Sent ${totalSent} recipients, ${failedCount} failed in ${failedBatches.length} batches`);
 
             if (emailId) {
                 await updateEmailStatus(emailId, 'sent');
@@ -107,55 +135,61 @@ export async function POST(request) {
                 message: `Sent to ${totalSent} recipients in ${batches.length} batches (BCC)`,
                 results: {
                     successful: totalSent,
-                    failed: to.length - totalSent,
+                    failed: failedCount,
+                    failedBatches: failedBatches,
                 }
             });
         }
 
         // INDIVIDUAL SEND - with delay between each email
         const results = [];
+        let rateLimitHit = false;
+
         for (let i = 0; i < to.length; i++) {
             const recipient = to[i];
-            try {
-                const mailOptions = {
-                    from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
-                    to: recipient,
-                    subject: subject || 'Broadcast Email',
-                    text: text || '',
-                    html: html || text?.replace(/\n/g, '<br>') || '',
-                    attachments: attachments,
-                };
+            console.log(`📤 Processing recipient ${i + 1}/${to.length}: ${recipient}`);
 
-                const info = await transporter.sendMail(mailOptions);
-                console.log(`✅ Sent individual email to ${recipient} (${i + 1}/${to.length})`);
-                results.push({ recipient, success: true, messageId: info.messageId });
+            const mailOptions = {
+                from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
+                to: recipient,
+                subject: subject || 'Broadcast Email',
+                text: text || '',
+                html: html || text?.replace(/\n/g, '<br>') || '',
+                attachments: attachments,
+            };
 
-                if (i < to.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_INDIVIDUAL));
-                }
-            } catch (error) {
-                console.error(`Failed to send to ${recipient}:`, error);
-                results.push({ recipient, success: false, error: error.message });
+            const result = await sendWithRetry(mailOptions, recipient);
 
-                if (error.message?.includes('Too many login attempts')) {
-                    console.log('⏳ Rate limit hit, waiting 30 seconds...');
-                    await new Promise(resolve => setTimeout(resolve, 30000));
-                }
+            if (result.success) {
+                console.log(`✅ Sent to ${recipient} (${i + 1}/${to.length})`);
+                results.push({ recipient, success: true, messageId: result.info.messageId });
+            } else {
+                console.error(`❌ Failed to send to ${recipient} after ${MAX_RETRIES} attempts: ${result.error?.message || 'Unknown error'}`);
+                results.push({ recipient, success: false, error: result.error?.message });
+            }
+
+            // Delay between individual emails
+            if (i < to.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_INDIVIDUAL));
             }
         }
 
         const successful = results.filter(r => r.success);
         const failed = results.filter(r => !r.success);
 
+        console.log(`📊 SUMMARY: Sent ${successful.length} emails successfully, ${failed.length} failed`);
+
         if (emailId) {
             if (failed.length === 0) {
                 await updateEmailStatus(emailId, 'sent');
+                console.log(`✅ Email status updated to 'sent'`);
             } else {
                 await updateEmailStatus(
                     emailId,
                     'sent',
                     `${failed.length} recipients failed`
                 );
+                console.log(`⚠️ Email status updated to 'sent' with ${failed.length} failures`);
             }
         }
 
@@ -165,11 +199,12 @@ export async function POST(request) {
             results: {
                 successful: successful.length,
                 failed: failed.length,
+                details: results,
             }
         });
 
     } catch (error) {
-        console.error('Email sending error:', error);
+        console.error('❌ Email sending error:', error);
         return NextResponse.json(
             { error: error.message },
             { status: 500 }
