@@ -23,12 +23,13 @@ export default function SchedulePicker({
     });
   };
 
-  const today = new Date().toLocaleString('en-US', {
-    timeZone: 'Asia/Singapore',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).split('/').reverse().join('-');
+  const getTodayInGMT8 = () => {
+    const now = new Date();
+    const gmt8Date = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Singapore' }));
+    return gmt8Date.toISOString().split('T')[0];
+  };
+
+  const today = getTodayInGMT8();
 
   return (
     <div className="space-y-3">
