@@ -69,12 +69,7 @@ export async function GET(request) {
 // ============================================================
 export async function POST(request) {
     try {
-        const host = request.headers.get('host') || 'ppitshenzhen.org';
-        const origin = request.headers.get('origin') ||
-            (process.env.NODE_ENV === 'production'
-                ? `https://${host}`
-                : `http://localhost:3000`);
-
+        const origin = "https://ppitshenzhen.org";
         const body = await request.json();
         const {
             recipients,

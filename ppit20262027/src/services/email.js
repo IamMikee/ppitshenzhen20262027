@@ -297,8 +297,7 @@ export async function sendEmails(recipients, content, emailId, type = 'broadcast
             attachmentFiles: attachmentFiles
         };
 
-        const baseUrl = origin;
-        const apiUrl = `${baseUrl}/api/emails/send`;
+        const apiUrl = `${origin}/api/emails/send`;
 
         if (individually) {
             const results = [];
