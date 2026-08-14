@@ -38,7 +38,7 @@ export default function WithFooterLayout({ children }) {
 
             {/* Follow Us Section */}
             <div className="mt-2 md:mt-0 md:text-right">
-              <div className="md:block hidden md:text-xl text-lg font-semibold font-montserrat text-center mb-2">
+              <div className="md:block hidden md:text-xl text-lg font-semibold font-montserrat text-center mb-2 text-gray-500">
                 Follow Us!
               </div>
               <div className="flex space-x-4 justify-center md:justify-end">
@@ -93,7 +93,7 @@ export default function WithFooterLayout({ children }) {
           {/* Footer Bottom */}
           <div className="border-t border-gray-300 md:mt-6 mt-4 md:pt-4 pt-2">
             <div className="text-center text-gray-600 text-sm">
-              © 2025 PPIT Shenzhen. All rights reserved.
+              © 2026 PPIT Shenzhen. All rights reserved.
             </div>
           </div>
         </div>

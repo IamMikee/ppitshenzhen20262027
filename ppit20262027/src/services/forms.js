@@ -98,9 +98,8 @@ export async function submitResponse(formId, questions, answers) {
   const formData = formSnap.data();
   const formTitle = formData.title || "";
 
-  // 🔹 SAVE RESPONSE
-  const docRef = await addDoc(collection(db, "responses"), {
-    formId,
+  // 🔹 SAVE RESPONSE - MODIFIED: Now saving to subcollection
+  const docRef = await addDoc(collection(db, "forms", formId, "responses"), {
     answers,
     submittedBy: userId,
     submittedAt: serverTimestamp(),
@@ -109,21 +108,6 @@ export async function submitResponse(formId, questions, answers) {
   // 🔹 UPDATE USER
   await updateUser(userId, {
     submittedFormId: formId,
-  });
-
-  // 🔹 UPDATE GOOGLE SHEETS
-  await fetch("https://script.google.com/macros/s/AKfycbzcLclk2Se9LlFIcLiCQUutSwaNqvNc_mXx35tpG4-Hy0i0a5rDvVYVMTYrG11L6lZu/exec", {
-    method: "POST",
-    body: JSON.stringify({
-      type: "submission",
-      formId,
-      responseId: docRef.id,
-      userId,
-      email: userEmail,
-      eventName: formTitle,
-      submittedAt: new Date().toISOString(),
-      answers,
-    }),
   });
 
   return docRef;

@@ -8,8 +8,7 @@ import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../../../lib/firebase";
 import { useParams } from "next/navigation";
 import { createForm } from "../../../../../services/forms";
-
-const INITIAL_QUESTION_ID = "initial-question-1";
+import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle } from "lucide-react";
 
 let clientIdCounter = 1;
 const generateClientId = () => {
@@ -21,148 +20,154 @@ const generateClientId = () => {
 export default function FormAdminBuilder() {
   const router = useRouter();
   const params = useParams();
-  const formId = params?.formId; 
+  const formId = params?.formId;
 
   const [form, setForm] = useState({
     id: null,
     title: "Untitled Form",
     description: "",
-    headerColor: "#bf3330", 
-    coverImage: "", 
+    headerColor: "#7E0C0E",
+    coverImage: "",
+    isActive: true,
+    isClosed: false,
     questions: [
       {
         id: "Name",
         type: "text",
-        label: "Name", 
+        label: "Name",
         required: true,
       },
     ],
   });
 
-  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [coverImageError, setCoverImageError] = useState(""); 
-  const [user, setUser] = useState(undefined);
+  const [coverImageError, setCoverImageError] = useState("");
+  const [user, setUser] = useState(null);
   const [admin, setAdmin] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [coverFile, setCoverFile] = useState(null); // store selected file
-
+  const [loading, setLoading] = useState(true);
+  const [coverFile, setCoverFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (formId === "new") {
+      const draft = localStorage.getItem("newFormDraft");
 
-  if (formId === "new") {
-    const draft = localStorage.getItem("newFormDraft");
-
-    if (draft) {
-      setForm(JSON.parse(draft));
-      localStorage.removeItem("newFormDraft");
-    }
-
-    return;
-  }
-
-  const fetchForm = async () => {
-    try {
-      const formRef = doc(db, "forms", formId);
-      const formSnap = await getDoc(formRef);
-
-      if (!formSnap.exists()) {
-        alert("Form not found");
-        router.push("/form");
-        return;
+      if (draft) {
+        setForm(JSON.parse(draft));
+        localStorage.removeItem("newFormDraft");
       }
 
-      const data = formSnap.data();
-
-      setForm({
-        id: formId,
-        title: data.title || "Untitled Form",
-        description: data.description || "",
-        headerColor: data.headerColor || "#7E0C0E",
-        coverImage: data.coverImage || "",
-        questions: data.questions?.map((q) => ({
-          id: q.id || generateClientId(),
-          type: q.type,
-          label: q.label,
-          required: q.required || false,
-          options: q.options || [],
-          imageUrl: q.imageUrl || "",
-        })) || [],
-      });
-
-    } catch (error) {
-      console.error(error);
-      alert("Failed to load form.");
+      return;
     }
-  };
 
-  fetchForm();
-}, [formId]);
+    const fetchForm = async () => {
+      try {
+        const formRef = doc(db, "forms", formId);
+        const formSnap = await getDoc(formRef);
+
+        if (!formSnap.exists()) {
+          alert("Form not found");
+          router.push("/form");
+          return;
+        }
+
+        const data = formSnap.data();
+
+        setForm({
+          id: formId,
+          title: data.title || "Untitled Form",
+          description: data.description || "",
+          headerColor: data.headerColor || "#7E0C0E",
+          coverImage: data.coverImage || "",
+          isActive: data.isActive !== undefined ? data.isActive : true,
+          isClosed: data.isClosed !== undefined ? data.isClosed : false,
+          questions: data.questions?.map((q) => ({
+            id: q.id || generateClientId(),
+            type: q.type,
+            label: q.label,
+            required: q.required || false,
+            options: q.options || [],
+            imageUrl: q.imageUrl || "",
+          })) || [],
+        });
+
+      } catch (error) {
+        console.error(error);
+        alert("Failed to load form.");
+      }
+    };
+
+    fetchForm();
+  }, [formId]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-          router.replace("/login");
-          return;
+        router.replace("/login");
+        setLoading(false);
+        return;
       }
 
       setUser(currentUser);
-        
+
       try {
-        // 🔹 Fetch user data
         const userRef = doc(db, "users", currentUser.uid);
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
-            const userData = userSnap.data();
-            setAdmin(userData.admin || false);
+          const userData = userSnap.data();
+          const isAdmin = userData.admin || false;
+          setAdmin(isAdmin);
+
+          if (!isAdmin) {
+            router.replace("/");
+          }
         }
       } catch (error) {
+        console.error("Error verifying admin status:", error);
         alert("Gagal memverifikasi status admin!");
+      } finally {
+        setLoading(false);
       }
-    }); 
+    });
 
     return () => unsubscribe();
   }, []);
 
   const updateFormMeta = (field, value) => {
     if (field === "coverImage") {
-      setCoverImageError(""); // clear previous error
+      setCoverImageError("");
     }
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Handle file select (no upload yet)
   const handleCoverUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Optional: validate file size immediately
     if (file.size > 10 * 1024 * 1024) {
       setCoverImageError("File must be under 10MB");
       return;
     }
 
     setCoverFile(file);
-    setCoverImageError(""); // clear previous errors
+    setCoverImageError("");
   };
 
-
-  // addNewQuestion
   const addNewQuestion = () => {
-  const newQuestion = {
-    id: generateClientId(),
-    type: "text",
-    label: "Type Question",
-    required: false,
-    options: [],
-    imageUrl: "", // ✅ NEW
+    const newQuestion = {
+      id: generateClientId(),
+      type: "text",
+      label: "Type Question",
+      required: false,
+      options: [],
+      imageUrl: "",
+    };
+    if (["radio", "checkbox"].includes(newQuestion.type)) newQuestion.options = ["Option 1"];
+    setForm({ ...form, questions: [...form.questions, newQuestion] });
   };
-  if (["radio", "checkbox"].includes(newQuestion.type)) newQuestion.options = ["Option 1"];
-  setForm({ ...form, questions: [...form.questions, newQuestion] });
-};
 
-  // deleteQuestion
   const deleteQuestion = (questionId) => {
     setForm({
       ...form,
@@ -170,7 +175,6 @@ export default function FormAdminBuilder() {
     });
   };
 
-  // updateQuestion
   const updateQuestion = (questionId, field, value) => {
     setForm({
       ...form,
@@ -180,7 +184,6 @@ export default function FormAdminBuilder() {
     });
   };
 
-  // changeQuestionType
   const changeQuestionType = (questionId, newType) => {
     setForm({
       ...form,
@@ -195,7 +198,6 @@ export default function FormAdminBuilder() {
     });
   };
 
-  // addOption 
   const addOption = (questionId) => {
     setForm({
       ...form,
@@ -207,7 +209,6 @@ export default function FormAdminBuilder() {
     });
   };
 
-  // deleteOption
   const deleteOption = (questionId, optionIndex) => {
     setForm({
       ...form,
@@ -236,16 +237,15 @@ export default function FormAdminBuilder() {
 
     if (targetIndex < 0 || targetIndex >= newQuestions.length) return;
 
-    // swap
-    [newQuestions[index], newQuestions[targetIndex]] = 
+    [newQuestions[index], newQuestions[targetIndex]] =
       [newQuestions[targetIndex], newQuestions[index]];
 
     setForm({ ...form, questions: newQuestions });
   };
 
-  const publishForm = async () => {
-    if (!showPublishConfirm) {
-      setShowPublishConfirm(true);
+  const saveForm = async () => {
+    if (!showSaveConfirm) {
+      setShowSaveConfirm(true);
       setShowDeleteConfirm(false);
       return;
     }
@@ -255,12 +255,12 @@ export default function FormAdminBuilder() {
       return;
     }
 
+    setSaving(true);
     setLoading(true);
 
     try {
       let coverImageUrl = form.coverImage;
 
-      // Upload cover image only if a new file was selected
       if (coverFile) {
         const formData = new FormData();
         formData.append("file", coverFile);
@@ -282,44 +282,43 @@ export default function FormAdminBuilder() {
         const data = await res.json();
         coverImageUrl = data.secure_url;
       }
+
       const isEditing = formId && formId !== "new";
 
-      // 🔵 EDIT EXISTING FORM
       if (isEditing) {
         const formRef = doc(db, "forms", formId);
 
         await updateDoc(formRef, {
-            title: form.title,
-            description: form.description,
-            headerColor: form.headerColor,
-            coverImage: coverImageUrl,
-            questions: form.questions,
+          title: form.title,
+          description: form.description,
+          headerColor: form.headerColor,
+          coverImage: coverImageUrl,
+          questions: form.questions,
+          isActive: form.isActive,
+          isClosed: form.isClosed,
+          updatedAt: new Date().toISOString(),
         });
 
-        alert("Form updated successfully!");
-      } 
-      
-      // 🟢 CREATE NEW FORM
-      else {
+        alert("Form saved successfully!");
+      } else {
         const response = await createForm({
-            title: form.title,
-            description: form.description,
-            questions: form.questions,
-            headerColor: form.headerColor,
-            coverImage: coverImageUrl,
-            published: true,
-            createdBy: user.uid,
-          });
+          title: form.title,
+          description: form.description,
+          questions: form.questions,
+          headerColor: form.headerColor,
+          coverImage: coverImageUrl,
+          isActive: form.isActive,
+          isClosed: form.isClosed,
+          published: true,
+          createdBy: user.uid,
+        });
 
         const newId = response.id;
-
         alert("Form created successfully!");
-
-        // Replace URL so page becomes editing mode
         router.replace(`/form/${newId}/adminform`);
       }
 
-      setShowPublishConfirm(false);
+      setShowSaveConfirm(false);
       setCoverFile(null);
 
     } catch (error) {
@@ -327,35 +326,34 @@ export default function FormAdminBuilder() {
       alert("Error: " + error.message);
     } finally {
       setLoading(false);
+      setSaving(false);
     }
   };
 
   const deleteForm = async () => {
     if (!showDeleteConfirm) {
       setShowDeleteConfirm(true);
-      setShowPublishConfirm(false);
+      setShowSaveConfirm(false);
       return;
     }
 
     try {
       const isEditing = formId && formId !== "new";
 
-      // 🔴 If editing existing form → delete from Firestore
       if (isEditing) {
-      await deleteDoc(doc(db, "forms", formId));
-      alert("Form deleted successfully!");
-      router.replace("/form"); //delet > form list
-      router.refresh();
-      } 
-      
-      // 🟡 If it's a new unsaved form → just reset state
-      else {
+        await deleteDoc(doc(db, "forms", formId));
+        alert("Form deleted successfully!");
+        router.replace("/form");
+        router.refresh();
+      } else {
         setForm({
           id: null,
           title: "Untitled Form",
           description: "",
           headerColor: "#7E0C0E",
           coverImage: "",
+          isActive: true,
+          isClosed: false,
           questions: [
             {
               id: generateClientId(),
@@ -366,12 +364,10 @@ export default function FormAdminBuilder() {
             },
           ],
         });
-
         alert("Blank form reset.");
       }
 
       setShowDeleteConfirm(false);
-
     } catch (error) {
       console.error("Delete error:", error);
       alert("Failed to delete form.");
@@ -379,7 +375,7 @@ export default function FormAdminBuilder() {
   };
 
   const cancelConfirmation = () => {
-    setShowPublishConfirm(false);
+    setShowSaveConfirm(false);
     setShowDeleteConfirm(false);
   };
 
@@ -388,9 +384,9 @@ export default function FormAdminBuilder() {
     { value: "textarea", label: "Paragraph" },
     { value: "radio", label: "Multiple Choice" },
     { value: "checkbox", label: "Checkboxes" },
-    { value: "file", label: "File Upload" }, // File Upload User
+    { value: "file", label: "File Upload" },
     { value: "info", label: "Text Only (No Answer)" },
-    { value: "image", label: "Image Display" }, // Image Upload Admin
+    { value: "image", label: "Image Display" },
   ];
 
   const handleQuestionImageUpload = async (e, questionId) => {
@@ -412,9 +408,8 @@ export default function FormAdminBuilder() {
         `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
         { method: "POST", body: formData }
       );
-      
-      const data = await res.json();
 
+      const data = await res.json();
       updateQuestion(questionId, "imageUrl", data.secure_url);
     } catch (err) {
       console.error(err);
@@ -422,13 +417,11 @@ export default function FormAdminBuilder() {
     }
   };
 
-  // Allow <b> and <strong> for questions
   const sanitizeBoldOnly = (html) => {
     const div = document.createElement("div");
     div.innerHTML = html;
 
     const walk = (node) => {
-      // Copy children first (important to avoid mutation issues)
       const children = Array.from(node.childNodes);
 
       for (let child of children) {
@@ -437,14 +430,11 @@ export default function FormAdminBuilder() {
 
           if (!["b", "strong", "br"].includes(tag)) {
             const parent = child.parentNode;
-
-            // ✅ SAFETY CHECK (fixes your crash)
             if (!parent) continue;
 
             while (child.firstChild) {
               parent.insertBefore(child.firstChild, child);
             }
-
             parent.removeChild(child);
           } else {
             walk(child);
@@ -457,715 +447,466 @@ export default function FormAdminBuilder() {
     return div.innerHTML;
   };
 
-  if (user === undefined) {
+  // Show loading state while checking auth
+  if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "#7E0C0E" }}>
-        <p className="font-montserrat" style={{ color: "white", fontSize: "1.2rem", textAlign: "center" }}>Please try logging in again.</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#7E0C0E] border-t-transparent"></div>
+          <p className="mt-4 text-gray-500 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  if (user && !admin) {
+  // If not logged in, show login message (though should redirect)
+  if (!user) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "#7E0C0E" }}>
-        <p className="font-montserrat" style={{ color: "white", fontSize: "1.2rem", textAlign: "center" }}>You do not have permission to view this page.</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-semibold text-gray-800 mb-2">Please Log In</h2>
+          <p className="text-gray-500">You need to be logged in to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If logged in but not admin, show access denied
+  if (!admin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-semibold text-gray-800 mb-2">Access Denied</h2>
+          <p className="text-gray-500">You do not have permission to view this page.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      backgroundColor: form.headerColor, 
-      fontFamily: "Arial, sans-serif",
-      margin: "4rem auto 0 auto",
-      padding: 0
-    }}>
-      <header style={{
-        backgroundColor: "white",
-        borderBottom: "1px solid #e5e7eb",
-        padding: "1rem 1.5rem",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center"
-      }}>
-        <h1 style={{
-          fontSize: "1.5rem",
-          fontWeight: "bold",
-          color: "#111827",
-          margin: 0
-        }}>PPITSZ Form Builder</h1>
+    <div
+      className="min-h-screen py-16 px-4 pt-24"
+      style={{ backgroundColor: "#7E0C0E" }}
+    >
+      <div className="max-w-4xl mx-auto">
+        {/* Header Bar */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-12 flex flex-wrap items-center justify-between gap-4">
+          <button
+            onClick={() => router.push('/form')}
+            className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ArrowLeft size={20} />
+            <span>Back to Forms</span>
+          </button>
 
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-          {showDeleteConfirm ? (
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Active Toggle Switch */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Active</span>
+              <button
+                onClick={() => updateFormMeta("isActive", !form.isActive)}
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isActive ? "bg-[#7E0C0E]" : "bg-gray-300"
+                  }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.isActive ? "left-6" : "left-0.5"
+                    }`}
+                />
+              </button>
+              <span className="text-sm">
+                {form.isActive ? (
+                  <span className="flex items-center gap-1 text-green-600">
+                    <Eye size={16} /> Live
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-gray-400">
+                    <EyeOff size={16} /> Hidden
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Separator */}
+            <div className="w-px h-8 bg-gray-300"></div>
+
+            {/* Closed Toggle Switch */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Closed</span>
+              <button
+                onClick={() => updateFormMeta("isClosed", !form.isClosed)}
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isClosed ? "bg-red-500" : "bg-gray-300"
+                  }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.isClosed ? "left-6" : "left-0.5"
+                    }`}
+                />
+              </button>
+              <span className="text-sm">
+                {form.isClosed ? (
+                  <span className="flex items-center gap-1 text-red-500">
+                    <XCircle size={16} /> Closed
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-green-600">
+                    <CheckCircle size={16} /> Open
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={deleteForm}
+                  className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  onClick={cancelConfirmation}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
               <button
                 onClick={deleteForm}
-                style={{
-                  backgroundColor: "#ef4444",
-                  color: "white",
-                  padding: "0.5rem 1rem",
-                  borderRadius: "0.375rem",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                  transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = "#dc2626"}
-                onMouseOut={(e) => e.target.style.backgroundColor = "#ef4444"}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200"
               >
-                Confirm Delete
+                <Trash2 size={18} />
+                Delete
               </button>
+            )}
+
+            {showSaveConfirm ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={saveForm}
+                  disabled={loading}
+                  className="bg-[#7E0C0E] text-white px-6 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                      Saving...
+                    </span>
+                  ) : (
+                    "Confirm Save"
+                  )}
+                </button>
+                <button
+                  onClick={cancelConfirmation}
+                  disabled={loading}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={cancelConfirmation}
-                style={{
-                  backgroundColor: "#f3f4f6",
-                  color: "#374151",
-                  padding: "0.5rem 1rem",
-                  borderRadius: "0.375rem",
-                  border: "1px solid #e5e7eb",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                  transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = "#e5e7eb"}
-                onMouseOut={(e) => e.target.style.backgroundColor = "#f3f4f6"}
+                onClick={saveForm}
+                className="flex items-center gap-2 bg-[#7E0C0E] text-white px-6 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
               >
-                Cancel
+                <Save size={18} />
+                Save Form
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={deleteForm}
-              style={{
-                backgroundColor: "#f87171",
-                color: "white",
-                padding: "0.5rem 1rem",
-                borderRadius: "0.375rem",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                transition: "background-color 0.2s"
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = "#ef4444"}
-              onMouseOut={(e) => e.target.style.backgroundColor = "#f87171"}
-            >
-              🗑️ Delete Form
-            </button>
-          )}
-
-          {showPublishConfirm ? (
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <button
-                onClick={publishForm}
-                disabled={loading}
-                style={{
-                  backgroundColor: "#10b981",
-                  color: "white",
-                  padding: "0.5rem 1rem",
-                  borderRadius: "0.375rem",
-                  border: "none",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "0.9rem",
-                  transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = "#059669")}
-                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = "#10b981")}
-              >
-                {loading ? "Publishing..." : "Confirm Publish"}
-              </button>
-              <button
-                onClick={cancelConfirmation}
-                disabled={loading}
-                style={{
-                  backgroundColor: "#f3f4f6",
-                  color: "#374151",
-                  padding: "0.5rem 1rem",
-                  borderRadius: "0.375rem",
-                  border: "1px solid #e5e7eb",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "0.9rem",
-                  transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = "#e5e7eb")}
-                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = "#f3f4f6")}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={publishForm}
-              style={{
-                backgroundColor: "#2563eb",
-                color: "white",
-                padding: "0.5rem 1.5rem",
-                borderRadius: "0.375rem",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                transition: "background-color 0.2s"
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = "#1d4ed8"}
-              onMouseOut={(e) => e.target.style.backgroundColor = "#2563eb"}
-            >
-              🚀 Publish
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main style={{
-        maxWidth: "768px",
-        margin: "0 auto",
-        padding: "2rem 1rem"
-      }}>
-        <div style={{
-          backgroundColor: "white",
-          borderRadius: "0.5rem",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-          border: "1px solid #e5e7eb",
-          padding: "1.5rem",
-          marginBottom: "2rem"
-        }}>
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => updateFormMeta("title", e.target.value)}
-            style={{
-              width: "100%",
-              fontSize: "1.875rem",
-              fontWeight: "bold",
-              border: "none",
-              outline: "none",
-              marginBottom: "0.5rem",
-              padding: "0.25rem 0",
-              boxSizing: "border-box",
-              color: "#111827",
-              placeholder: "Form Title"
-            }}
-            placeholder="Form Title"
-          />
-          <div
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={(e) => {
-              const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
-              updateFormMeta("description", clean);
-            }}
-            onPaste={(e) => {
-              e.preventDefault();
-              const text = e.clipboardData.getData("text/plain");
-              document.execCommand("insertText", false, text);
-            }}
-            dangerouslySetInnerHTML={{ __html: form.description || "" }}
-            style={{
-              width: "100%",
-              fontSize: "1rem",
-              outline: "none",
-              padding: "0.25rem 0",
-              color: "#4b5563",
-              minHeight: "40px",
-              whiteSpace: "pre-wrap",
-              borderBottom: "1px solid transparent"
-            }}
-            onFocus={(e) => (e.target.style.borderBottom = "1px solid #2563eb")}
-            onBlurCapture={(e) => (e.target.style.borderBottom = "1px solid transparent")}
-          />
-        </div>
-
-        <div style={{
-          backgroundColor: "white",
-          borderRadius: "0.5rem",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-          border: "1px solid #e5e7eb",
-          padding: "1.5rem",
-          marginBottom: "2rem"
-        }}>
-          <h2 style={{
-            fontSize: "1.25rem",
-            fontWeight: "600",
-            color: "#111827",
-            margin: "0 0 1.5rem 0"
-          }}>Form Appearance</h2>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{
-              display: "block",
-              fontSize: "0.9rem",
-              color: "#374151",
-              marginBottom: "0.5rem"
-            }}>Header Color (Hex Code)</label>
-            <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-              <input
-                type="color"
-                value={form.headerColor}
-                onChange={(e) => updateFormMeta("headerColor", e.target.value)}
-                style={{
-                  width: "3rem",
-                  height: "3rem",
-                  border: "none",
-                  borderRadius: "0.25rem",
-                  cursor: "pointer"
-                }}
-              />
-              <input
-                type="text"
-                value={form.headerColor}
-                onChange={(e) => {
-                  const hexPattern = /^#([0-9A-Fa-f]{6})$/;
-                  if (hexPattern.test(e.target.value) || e.target.value === "") {
-                    updateFormMeta("headerColor", e.target.value);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: "0.75rem",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.9rem",
-                  color: "#374151"
-                }}
-                placeholder="#7E0C0E"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "0.9rem",
-                color: "#374151",
-                marginBottom: "0.5rem",
-              }}
-            >
-              Upload Cover Image
-            </label>
-
-            <input
-              type="file"
-              accept="image/*"
-              className="block text-sm
-                file:mr-4 file:rounded
-                file:border-0
-                file:bg-[#B88C8C]
-                file:px-4 file:py-2
-                file:text-black
-                hover:file:opacity-90"
-              onChange={handleCoverUpload}
-            />
-
-            {coverImageError && (
-              <p
-                style={{
-                  color: "#ef4444",
-                  fontSize: "0.8rem",
-                  marginTop: "0.5rem",
-                  marginBottom: 0,
-                }}
-              >
-                {coverImageError}
-              </p>
             )}
           </div>
         </div>
 
-        <div style={{ marginBottom: "2rem" }}>
+        {/* Form Title & Description */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+          <div className="p-6 space-y-4">
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => updateFormMeta("title", e.target.value)}
+              className="w-full text-3xl font-bold text-gray-800 border-0 border-b-2 border-transparent focus:border-[#7E0C0E] outline-none transition-all duration-200 px-2 py-1"
+              placeholder="Form Title"
+            />
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={(e) => {
+                const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
+                updateFormMeta("description", clean);
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const text = e.clipboardData.getData("text/plain");
+                document.execCommand("insertText", false, text);
+              }}
+              dangerouslySetInnerHTML={{ __html: form.description || "" }}
+              className="w-full text-gray-500 outline-none min-h-[40px] px-2 py-1 border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200"
+              placeholder="Form description (optional)"
+            />
+          </div>
+        </div>
+
+        {/* Form Appearance */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Form Appearance</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-500 mb-2">Header Color</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="color"
+                    value={form.headerColor}
+                    onChange={(e) => updateFormMeta("headerColor", e.target.value)}
+                    className="w-12 h-12 rounded-lg cursor-pointer border border-gray-200"
+                  />
+                  <input
+                    type="text"
+                    value={form.headerColor}
+                    onChange={(e) => {
+                      const hexPattern = /^#([0-9A-Fa-f]{6})$/;
+                      if (hexPattern.test(e.target.value) || e.target.value === "") {
+                        updateFormMeta("headerColor", e.target.value);
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                    placeholder="#7E0C0E"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-500 mb-2">Cover Image</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="block text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0
+                    file:bg-[#7E0C0E] file:text-white
+                    file:hover:bg-[#9E1A1C] file:transition-all file:duration-200
+                    hover:file:shadow-md hover:file:-translate-y-0.5"
+                  onChange={handleCoverUpload}
+                />
+                {coverImageError && (
+                  <p className="text-red-500 text-sm mt-2">{coverImageError}</p>
+                )}
+                {form.coverImage && !coverFile && (
+                  <div className="mt-3">
+                    <img
+                      src={form.coverImage}
+                      alt="Cover"
+                      className="rounded-lg max-h-48 object-cover border border-gray-200"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Questions */}
+        <div className="space-y-4 mb-6">
           {form.questions.map((question, index) => (
             <div
               key={question.id}
-              style={{
-                backgroundColor: "white",
-                borderRadius: "0.5rem",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                border: "1px solid #e5e7eb",
-                padding: "1.5rem",
-                marginBottom: "1.5rem",
-                transition: "border-color 0.2s"
-              }}
-              onMouseOver={(e) => e.currentTarget.style.borderColor = "#d1d5db"}
-              onMouseOut={(e) => e.currentTarget.style.borderColor = "#e5e7eb"}
+              className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200"
             >
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: "1rem"
-              }}>
-                <div
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => {
-                    const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
-                    updateQuestion(question.id, "label", clean);
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const text = e.clipboardData.getData("text/plain");
-                    document.execCommand("insertText", false, text);
-                  }}
-                  dangerouslySetInnerHTML={{ __html: question.label || "" }}
-                  style={{
-                    width: "100%",
-                    maxWidth: "600px",
-                    fontSize: "1.125rem",
-                    fontWeight: "500",
-                    border: "none",
-                    outline: "none",
-                    padding: "0.5rem 0",
-                    boxSizing: "border-box",
-                    borderBottom: "1px solid transparent",
-                    color: "#111827",
-                    whiteSpace: "pre-wrap"
-                  }}
-                  onFocus={(e) => (e.target.style.borderBottom = "1px solid #2563eb")}
-                  onBlurCapture={(e) => (e.target.style.borderBottom = "1px solid transparent")}
-                />
-                <select
-                  value={question.type}
-                  onChange={(e) => changeQuestionType(question.id, e.target.value)}
-                  style={{
-                    padding: "0.4rem 0.6rem",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "0.375rem",
-                    backgroundColor: "white",
-                    fontSize: "0.85rem",
-                    color: "#374151"
-                  }}
-                >
-                  {questionTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {question.type === "text" && (
-                <input
-                  type="text"
-                  placeholder="Respondent's short answer"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "0.375rem",
-                    marginBottom: "1rem",
-                    color: "#6b7280",
-                    backgroundColor: "#f9fafb"
-                  }}
-                  readOnly
-                />
-              )}
-
-              {question.type === "textarea" && (
-                <textarea
-                  placeholder="Respondent's paragraph answer"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "0.375rem",
-                    marginBottom: "1rem",
-                    color: "#6b7280",
-                    backgroundColor: "#f9fafb",
-                    minHeight: "100px"
-                  }}
-                  readOnly
-                  rows={4}
-                />
-              )}
-
-              {["radio", "checkbox"].includes(question.type) && (
-                <div style={{
-                  marginBottom: "1rem",
-                  gap: "0.75rem",
-                  display: "flex",
-                  flexDirection: "column"
-                }}>
-                  {question.options.map((option, index) => (
-                    <div key={`${question.id}-option-${index}`} style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem"
-                    }}>
-                      <div style={{
-                        width: "1rem",
-                        height: "1rem",
-                        border: "1px solid #9ca3af",
-                        borderRadius: question.type === "radio" ? "50%" : "0.25rem",
-                        flexShrink: 0
-                      }}></div>
-
-                      <input
-                        type="text"
-                        value={option}
-                        onChange={(e) => updateOption(question.id, index, e.target.value)}
-                        style={{
-                          flex: 1,
-                          border: "none",
-                          outline: "none",
-                          padding: "0.25rem 0.5rem",
-                          borderBottom: "1px solid #e5e7eb",
-                          fontSize: "0.9rem"
-                        }}
-                        placeholder="Option"
-                      />
-
-                      <button
-                        onClick={() => deleteOption(question.id, index)}
-                        disabled={question.options.length === 1}
-                        style={{
-                          color: question.options.length === 1 ? "#d1d5db" : "#6b7280",
-                          border: "none",
-                          background: "none",
-                          cursor: question.options.length === 1 ? "not-allowed" : "pointer",
-                          fontSize: "1rem",
-                          padding: "0.25rem",
-                          borderRadius: "0.25rem"
-                        }}
-                        onMouseOver={(e) => {
-                          if (question.options.length > 1) {
-                            e.target.style.color = "#ef4444";
-                            e.target.style.backgroundColor = "#fee2e2";
-                          }
-                        }}
-                        onMouseOut={(e) => {
-                          if (question.options.length > 1) {
-                            e.target.style.color = "#6b7280";
-                            e.target.style.backgroundColor = "transparent";
-                          }
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => addOption(question.id)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      color: "#2563eb",
-                      border: "none",
-                      background: "none",
-                      cursor: "pointer",
-                      fontSize: "0.875rem",
-                      padding: "0.5rem 0",
-                      transition: "color 0.2s"
+              <div className="p-6">
+                <div className="flex flex-wrap items-start gap-4 mb-4">
+                  <div
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => {
+                      const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
+                      updateQuestion(question.id, "label", clean);
                     }}
-                    onMouseOver={(e) => e.target.style.color = "#1d4ed8"}
-                    onMouseOut={(e) => e.target.style.color = "#2563eb"}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const text = e.clipboardData.getData("text/plain");
+                      document.execCommand("insertText", false, text);
+                    }}
+                    dangerouslySetInnerHTML={{ __html: question.label || "" }}
+                    className="flex-1 text-lg font-medium text-gray-800 outline-none border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200 px-2 py-1 min-w-[200px]"
+                    placeholder="Question text..."
+                  />
+                  <select
+                    value={question.type}
+                    onChange={(e) => changeQuestionType(question.id, e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
                   >
-                    ➕ Add Option
-                  </button>
+                    {questionTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
 
-              {question.type === "file" && (
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.875rem",
-                  color: "#4b5563",
-                  backgroundColor: "#f3f4f6",
-                  padding: "0.75rem",
-                  borderRadius: "0.375rem",
-                  marginBottom: "0.5rem"
-                }}>
-                  ℹ️ Users will be able to upload files (images, documents, etc.)
-                </div>
-              )}
+                {/* Question type previews */}
+                {question.type === "text" && (
+                  <input
+                    type="text"
+                    placeholder="Respondent's short answer"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-500 bg-gray-50 cursor-not-allowed"
+                    readOnly
+                  />
+                )}
 
-              {question.type === "info" && (
-                <div
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "0.375rem",
-                    backgroundColor: "#f9fafb",
-                    color: "#374151",
-                    fontSize: "0.95rem",
-                    marginBottom: "1rem"
-                  }}
-                >
-                  ℹ️ This is display text only. Users will not answer this.
-                </div>
-              )}
+                {question.type === "textarea" && (
+                  <textarea
+                    placeholder="Respondent's paragraph answer"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-500 bg-gray-50 cursor-not-allowed min-h-[100px]"
+                    readOnly
+                    rows={4}
+                  />
+                )}
 
-              {question.type === "image" && (
-                <div style={{ marginBottom: "1rem" }}>
-                  
-                  {!question.imageUrl ? (
-                    // ✅ No image yet → show upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleQuestionImageUpload(e, question.id)}
-                    />
-                  ) : (
-                    // ✅ Image exists → show preview + controls
-                    <div>
-                      <img
-                        src={question.imageUrl}
-                        alt="Uploaded"
-                        style={{
-                          maxWidth: "100%",
-                          borderRadius: "0.5rem",
-                          border: "1px solid #e5e7eb"
-                        }}
-                      />
-
-                      <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
-                        {/* Change Image */}
-                        <label
-                          style={{
-                            cursor: "pointer",
-                            color: "#2563eb",
-                            fontSize: "0.85rem"
-                          }}
-                        >
-                          Change Image
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={(e) => handleQuestionImageUpload(e, question.id)}
-                          />
-                        </label>
-
-                        {/* Remove Image */}
+                {["radio", "checkbox"].includes(question.type) && (
+                  <div className="space-y-2">
+                    {question.options.map((option, idx) => (
+                      <div key={`${question.id}-option-${idx}`} className="flex items-center gap-3">
+                        <div className={`w-4 h-4 border-2 border-gray-300 flex-shrink-0 ${question.type === "radio" ? "rounded-full" : "rounded"
+                          }`} />
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(e) => updateOption(question.id, idx, e.target.value)}
+                          className="flex-1 px-2 py-1 border-b border-gray-200 focus:border-[#7E0C0E] outline-none text-gray-700"
+                          placeholder="Option"
+                        />
                         <button
-                          onClick={() => updateQuestion(question.id, "imageUrl", "")}
-                          style={{
-                            color: "#ef4444",
-                            border: "none",
-                            background: "none",
-                            cursor: "pointer",
-                            fontSize: "0.85rem"
-                          }}
+                          onClick={() => deleteOption(question.id, idx)}
+                          disabled={question.options.length === 1}
+                          className={`p-1 rounded transition-colors ${question.options.length === 1
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-400 hover:text-red-500 hover:bg-red-50"
+                            }`}
                         >
-                          Remove
+                          <Trash2 size={16} />
                         </button>
                       </div>
-                    </div>
+                    ))}
+                    <button
+                      onClick={() => addOption(question.id)}
+                      className="flex items-center gap-2 text-[#7E0C0E] hover:text-[#9E1A1C] transition-colors text-sm"
+                    >
+                      <Plus size={16} />
+                      Add Option
+                    </button>
+                  </div>
+                )}
+
+                {question.type === "file" && (
+                  <div className="bg-gray-50 rounded-lg p-4 text-gray-500 text-sm border border-dashed border-gray-300">
+                    📎 Users will be able to upload files (images, documents, etc.)
+                  </div>
+                )}
+
+                {question.type === "info" && (
+                  <div className="bg-gray-50 rounded-lg p-4 text-gray-500 text-sm border border-gray-200">
+                    ℹ️ This is display text only. Users will not answer this.
+                  </div>
+                )}
+
+                {question.type === "image" && (
+                  <div className="space-y-3">
+                    {!question.imageUrl ? (
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="block text-sm text-gray-500
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-lg file:border-0
+                          file:bg-[#7E0C0E] file:text-white
+                          file:hover:bg-[#9E1A1C] file:transition-all file:duration-200
+                          hover:file:shadow-md hover:file:-translate-y-0.5"
+                        onChange={(e) => handleQuestionImageUpload(e, question.id)}
+                      />
+                    ) : (
+                      <div>
+                        <img
+                          src={question.imageUrl}
+                          alt="Question"
+                          className="rounded-lg max-h-64 object-contain border border-gray-200"
+                        />
+                        <div className="flex gap-3 mt-2">
+                          <label className="text-sm text-[#7E0C0E] hover:text-[#9E1A1C] cursor-pointer transition-colors">
+                            Change Image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleQuestionImageUpload(e, question.id)}
+                            />
+                          </label>
+                          <button
+                            onClick={() => updateQuestion(question.id, "imageUrl", "")}
+                            className="text-sm text-red-500 hover:text-red-600 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Bottom controls */}
+                <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                  {!["info", "image"].includes(question.type) && (
+                    <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={question.required}
+                        onChange={(e) => updateQuestion(question.id, "required", e.target.checked)}
+                        className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] rounded cursor-pointer"
+                      />
+                      Required
+                    </label>
                   )}
-                </div>
-              )}
-
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginTop: "1rem"
-              }}>
-                {!["info", "image"].includes(question.type) && (
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem"
-                }}>
-                  <input
-                    type="checkbox"
-                    id={`required-${question.id}`}
-                    checked={question.required}
-                    onChange={(e) => updateQuestion(question.id, "required", e.target.checked)}
-                    style={{
-                      width: "1rem",
-                      height: "1rem",
-                      color: "#2563eb",
-                      accentColor: "#2563eb"
-                    }}
-                  />
-                  <label
-                    htmlFor={`required-${question.id}`}
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "#374151"
-                    }}
-                  >
-                    Required
-                  </label>
-                </div>
-              )}
-              
-                <button
-                  onClick={() => deleteQuestion(question.id)}
-                  style={{
-                    marginLeft: "auto",
-                    color: "#ef4444",
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                    fontSize: "0.9rem",
-                    padding: "0.25rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.3rem"
-                  }}
-                >
-                  🗑️ Delete Question
-                </button>
-
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button
-                    onClick={() => moveQuestion(index, -1)}
-                    disabled={index === 0}
-                    style={{
-                      cursor: index === 0 ? "not-allowed" : "pointer",
-                      opacity: index === 0 ? 0.3 : 1
-                    }}
-                  >
-                    ⬆️
-                  </button>
 
                   <button
-                    onClick={() => moveQuestion(index, 1)}
-                    disabled={index === form.questions.length - 1}
-                    style={{
-                      cursor: index === form.questions.length - 1 ? "not-allowed" : "pointer",
-                      opacity: index === form.questions.length - 1 ? 0.3 : 1
-                    }}
+                    onClick={() => deleteQuestion(question.id)}
+                    className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 transition-colors ml-auto"
                   >
-                    ⬇️
+                    <Trash2 size={16} />
+                    Delete Question
                   </button>
+
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => moveQuestion(index, -1)}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronUp size={18} />
+                    </button>
+                    <button
+                      onClick={() => moveQuestion(index, 1)}
+                      disabled={index === form.questions.length - 1}
+                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
+        {/* Add Question Button */}
         <button
           onClick={addNewQuestion}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            backgroundColor: "#ffffffff",
-            color: "black",
-            border: "none",
-            borderRadius: "0.375rem",
-            padding: "0.75rem 1.5rem",
-            fontSize: "1rem",
-            cursor: "pointer",
-            margin: "0 auto",
-            transition: "background-color 0.2s"
-          }}
-          onMouseOver={(e) => e.target.style.backgroundColor = "#d4d4d4ff"}
-          onMouseOut={(e) => e.target.style.backgroundColor = "#ffffffff"}
+          className="w-full bg-white text-gray-700 border-2 border-dashed border-gray-300 rounded-2xl py-4 hover:border-[#7E0C0E] hover:text-[#7E0C0E] transition-all duration-200 flex items-center justify-center gap-2 font-medium"
         >
-          ➕ Add Question
+          <Plus size={20} />
+          Add Question
         </button>
-      </main>
+      </div>
     </div>
   );
 }

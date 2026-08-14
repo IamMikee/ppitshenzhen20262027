@@ -1,4 +1,4 @@
-import FormClient from "./FormClient";
+import FormClient from "../../../Components/FormClient";
 import { getFormById } from "../../../../services/forms";
 
 export default async function FormPage({ params }) {
