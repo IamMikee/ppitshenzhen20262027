@@ -27,3 +27,23 @@ body {
 	background: var(--background);
 	font-family: Arial, Helvetica, sans-serif;
 }
+
+
+/* ADMIN FORM SPECIAL STYLING */
+/* For the placeholder to show when empty */
+[contentEditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #9CA3AF;
+  pointer-events: none;
+}
+
+[contentEditable][data-placeholder]:empty:focus::before {
+  content: attr(data-placeholder);
+  color: #9CA3AF;
+  pointer-events: none;
+}
+
+/* When there's content, hide the placeholder */
+[contentEditable][data-placeholder]:not(:empty)::before {
+  display: none;
+}

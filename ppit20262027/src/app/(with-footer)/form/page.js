@@ -31,7 +31,6 @@ export default function loadAllFormsPage(){
     const getQrUrl = (qrContent) => `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrContent)}`;
     const activeForms = [];
 
-
     // GET USER AND FORMS DATA
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -140,69 +139,177 @@ export default function loadAllFormsPage(){
                     }
 
                 return (
-                    <div key={form.id} style={{ display: `${admin ? "auto" : form.isActive ? "auto" : "none"}`, position: "relative", borderRadius: "14px", overflow: "hidden", backgroundSize: "cover", backgroundPosition: "center", boxShadow: "0 10px 30px rgba(0, 0, 0, 0.25)", backgroundImage: `url(${form.coverImage || "/DefaultFormCardBackground.webp"})`, }}>
-                        <div className="font-montserrat" style={{ background: `${form.headerColor ?? "#bf3330"}`, color: `${isDark(form.headerColor ?? "#bf3330") ? "#FFF" : "#000"}`, fontWeight: 600, textAlign: "center", padding: "0.75rem 1rem", fontSize: "1rem", }}> {form.title} </div>
-                        
-                        <div style={{ position: "relative", height: "30vh", display: "flex", alignItems: "flex-end", justifyContent: "center", }}>
-                            {/* QR BUTTON (ONLY FOR ADMIN) */}
-                            <button
-                                onClick={() => setActiveQr(getQrUrl(form.id))}
-                                style={{
-                                    display:
-                                        admin ? "flex" : "none",
-                                    position: "absolute",
-                                    top: "10px",
-                                    right: "10px",
-                                    width: "36px",
-                                    height: "36px",
-                                    borderRadius: "50%",
-                                    border: "none",
-                                    background: "rgba(0,0,0,0.65)",
-                                    color: "white",
-                                    cursor: "pointer",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: "0.85rem",
-                                    zIndex: 2,
-                                }}> QR
-                            </button>
-
-                            {/* REGISTER BUTTON */}
-                            <button className="font-montserrat"
-                                style={ buttonStyle } 
-                                onClick={() => {
-                                    if (admin) {
-                                        router.push(`form/${form.id}/adminform`);
-                                    } else {
-                                        router.push(`form/${form.id}`)
-                                    }
-                                }}>
-                            {admin
-                                ? "Edit"
-                                : status === "submitted"
-                                ? "Submitted"
-                                : status === "attended"
-                                ? "Attended"
-                                : status === "closed"
-                                ? "Closed"
-                                : "Register"}
-                            </button>
-
-                            {/* VIEW RESPONSES BUTTON (ADMIN ONLY) */}
-                            {admin && (
-                                <button 
-                                    className="font-montserrat ml-4"
-                                    style={ buttonStyle }
-                                    onClick={() => router.push(`form/${form.id}/responses`)}
-                                > 
-                                Responses
+                    <div 
+                        key={form.id} 
+                        className="group relative"
+                        style={{ 
+                            display: `${admin ? "auto" : form.isActive ? "auto" : "none"}`,
+                        }}
+                    >
+                        {/* Card Container */}
+                        <div 
+                            style={{ 
+                                position: "relative", 
+                                borderRadius: "14px", 
+                                overflow: "hidden", 
+                                backgroundSize: "cover", 
+                                backgroundPosition: "center", 
+                                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.25)", 
+                                backgroundImage: `url(${form.coverImage || "/DefaultFormCardBackground.webp"})`,
+                                transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                            }}
+                            className="hover:scale-105 hover:shadow-2xl"
+                        >
+                            <div className="font-montserrat" style={{ background: `${form.headerColor ?? "#bf3330"}`, color: `${isDark(form.headerColor ?? "#bf3330") ? "#FFF" : "#000"}`, fontWeight: 600, textAlign: "center", padding: "0.75rem 1rem", fontSize: "1rem", }}> {form.title} </div>
+                            
+                            <div style={{ position: "relative", height: "30vh", display: "flex", alignItems: "flex-end", justifyContent: "center", }}>
+                                {/* QR BUTTON (ONLY FOR ADMIN) */}
+                                <button
+                                    onClick={() => setActiveQr(getQrUrl(form.id))}
+                                    style={{
+                                        display:
+                                            admin ? "flex" : "none",
+                                        position: "absolute",
+                                        top: "10px",
+                                        right: "10px",
+                                        width: "36px",
+                                        height: "36px",
+                                        borderRadius: "50%",
+                                        border: "none",
+                                        background: "rgba(0,0,0,0.65)",
+                                        color: "white",
+                                        cursor: "pointer",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontSize: "0.85rem",
+                                        zIndex: 2,
+                                    }}> QR
                                 </button>
-                            )}
-                        </div> 
+
+                                {/* REGISTER BUTTON */}
+                                <button className="font-montserrat"
+                                    style={ buttonStyle } 
+                                    onClick={() => {
+                                        if (admin) {
+                                            router.push(`form/${form.id}/adminform`);
+                                        } else {
+                                            router.push(`form/${form.id}`)
+                                        }
+                                    }}>
+                                {admin
+                                    ? "Edit"
+                                    : status === "submitted"
+                                    ? "Submitted"
+                                    : status === "attended"
+                                    ? "Attended"
+                                    : status === "closed"
+                                    ? "Closed"
+                                    : "Register"}
+                                </button>
+
+                                {/* VIEW RESPONSES BUTTON (ADMIN ONLY) */}
+                                {admin && (
+                                    <button 
+                                        className="font-montserrat ml-4"
+                                        style={ buttonStyle }
+                                        onClick={() => router.push(`form/${form.id}/responses`)}
+                                    > 
+                                    Responses
+                                    </button>
+                                )}
+                            </div> 
+                        </div>
+
+                        {/* FLOATING HOVER INFO BOX - Only for admins */}
+                        {admin && (
+                            <div 
+                                className="absolute left-1/2 transform -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20 group-hover:scale-100"
+                                style={{
+                                    top: "calc(100% + 2px)",
+                                    backgroundColor: "rgba(255, 255, 255, 0.98)",
+                                    borderRadius: "12px",
+                                    padding: "0.75rem 1rem",
+                                    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.2)",
+                                    backdropFilter: "blur(8px)",
+                                    border: "1px solid rgba(255, 255, 255, 0.3)",
+                                    minWidth: "200px",
+                                    transform: "translateX(-50%) scale(0.95)",
+                                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                                }}
+                            >
+                                {/* Small triangle pointer */}
+                                <div 
+                                    style={{
+                                        position: "absolute",
+                                        top: "-6px",
+                                        left: "50%",
+                                        transform: "translateX(-50%)",
+                                        width: 0,
+                                        height: 0,
+                                        borderLeft: "6px solid transparent",
+                                        borderRight: "6px solid transparent",
+                                        borderBottom: "6px solid rgba(255, 255, 255, 0.98)",
+                                    }}
+                                />
+                                
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-xs font-semibold text-gray-500">Form Status</span>
+                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                            form.isActive && !form.isClosed 
+                                                ? "bg-green-100 text-green-700" 
+                                                : form.isClosed 
+                                                ? "bg-red-100 text-red-700" 
+                                                : "bg-gray-100 text-gray-600"
+                                        }`}>
+                                            {form.isActive ? (form.isClosed ? "Closed" : "Active") : "Inactive"}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4 text-xs">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`inline-block w-2 h-2 rounded-full ${
+                                                form.isActive ? 'bg-green-500' : 'bg-gray-400'
+                                            }`}></span>
+                                            <span className="text-gray-600">
+                                                {form.isActive ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`inline-block w-2 h-2 rounded-full ${
+                                                form.isClosed ? 'bg-red-500' : 'bg-green-500'
+                                            }`}></span>
+                                            <span className="text-gray-600">
+                                                {form.isClosed ? 'Closed' : 'Open'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="pt-1.5 border-t border-gray-100 text-xs text-gray-400">
+                                        {form.isActive && !form.isClosed && (
+                                            <span className="flex items-center gap-1">
+                                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                                Accepting responses
+                                            </span>
+                                        )}
+                                        {form.isClosed && (
+                                            <span className="flex items-center gap-1">
+                                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                                Not accepting responses
+                                            </span>
+                                        )}
+                                        {!form.isActive && (
+                                            <span className="flex items-center gap-1">
+                                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                                                Form inactive
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )})}
-
-                
 
                 {/* FADE ANIMATION FOR OVERLAY */}
                 <div onClick={() => setActiveQr(null)}

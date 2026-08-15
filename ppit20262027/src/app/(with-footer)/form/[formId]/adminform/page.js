@@ -631,6 +631,7 @@ export default function FormAdminBuilder() {
             <div
               contentEditable
               suppressContentEditableWarning
+              data-placeholder="Form description (optional)"
               onBlur={(e) => {
                 const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
                 updateFormMeta("description", clean);
@@ -641,8 +642,9 @@ export default function FormAdminBuilder() {
                 document.execCommand("insertText", false, text);
               }}
               dangerouslySetInnerHTML={{ __html: form.description || "" }}
-              className="w-full text-gray-500 outline-none min-h-[40px] px-2 py-1 border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200"
-              placeholder="Form description (optional)"
+              className="w-full text-gray-500 outline-none min-h-[40px] px-2 py-1 
+             border-b-2 border-transparent focus:border-[#7E0C0E] 
+             transition-all duration-200"
             />
           </div>
         </div>
