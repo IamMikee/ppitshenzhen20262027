@@ -363,14 +363,12 @@ export default function loadAllFormsPage(){
                                     },
                                 ],
                                 published: false,
+                                isClosed: true,
                                 createdBy: user.uid,
                             }
                             
                             localStorage.setItem("newFormDraft", JSON.stringify(formData)); // Store temporarily
                             router.push("/form/new/adminform");
-
-                            //const docRef = await createForm(formData);
-                            //router.push(`/form/${docRef.id}/adminform`);
 
                         } catch (error) {
                             console.error(error);

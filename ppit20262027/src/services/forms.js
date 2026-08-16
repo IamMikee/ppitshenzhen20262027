@@ -28,7 +28,10 @@ export async function createForm(formData) {
     title: formData.title,
     description: formData.description,
     questions: formData.questions,
-    isActive: formData.published,
+    headerColor: formData.headerColor || "#7E0C0E",
+    coverImage: formData.coverImage || "",
+    isActive: formData.isActive !== undefined ? formData.isActive : false,   // ✅ Use passed value
+    isClosed: formData.isClosed !== undefined ? formData.isClosed : true,    // ✅ Use passed value
     createdBy: formData.createdBy,
     createdAt: serverTimestamp(),
   });
@@ -411,70 +414,70 @@ export async function markAttendance(formId) {
    HELPER FUNCTIONS
 ================== */
 export async function getUserByNameOrEmail(identifier) {
-    try {
-        const usersRef = collection(db, 'users');
-        
-        // Try to find by email first
-        let q = query(usersRef, where('email', '==', identifier));
-        let querySnapshot = await getDocs(q);
-        
-        // If not found by email, try by name
-        if (querySnapshot.empty) {
-            q = query(usersRef, where('name', '==', identifier));
-            querySnapshot = await getDocs(q);
-        }
-        
-        if (!querySnapshot.empty) {
-            const doc = querySnapshot.docs[0];
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-        }
-        
-        return null;
-    } catch (error) {
-        console.error('Error getting user data:', error);
-        return null;
+  try {
+    const usersRef = collection(db, 'users');
+
+    // Try to find by email first
+    let q = query(usersRef, where('email', '==', identifier));
+    let querySnapshot = await getDocs(q);
+
+    // If not found by email, try by name
+    if (querySnapshot.empty) {
+      q = query(usersRef, where('name', '==', identifier));
+      querySnapshot = await getDocs(q);
     }
+
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0];
+      return {
+        id: doc.id,
+        ...doc.data()
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting user data:', error);
+    return null;
+  }
 }
 
 export async function getUserNameByEmail(email) {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', email));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-            const doc = querySnapshot.docs[0];
-            const data = doc.data();
-            return data.name || data.displayName || email.split('@')[0];
-        }
-        
-        // Fallback: return email username if not found
-        return email.split('@')[0];
-    } catch (error) {
-        console.error('Error getting user name:', error);
-        return email.split('@')[0];
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0];
+      const data = doc.data();
+      return data.name || data.displayName || email.split('@')[0];
     }
+
+    // Fallback: return email username if not found
+    return email.split('@')[0];
+  } catch (error) {
+    console.error('Error getting user name:', error);
+    return email.split('@')[0];
+  }
 }
 
 export async function getUserByUid(uid) {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('uid', '==', uid));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-            const doc = querySnapshot.docs[0];
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-        }
-        return null;
-    } catch (error) {
-        console.error('Error getting user by UID:', error);
-        return null;
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('uid', '==', uid));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0];
+      return {
+        id: doc.id,
+        ...doc.data()
+      };
     }
+    return null;
+  } catch (error) {
+    console.error('Error getting user by UID:', error);
+    return null;
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../../../lib/firebase";
 import { useParams } from "next/navigation";
 import { createForm } from "../../../../../services/forms";
-import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle, Eye as EyeIcon, EyeOff as EyeOffIcon } from "lucide-react";
 
 let clientIdCounter = 1;
 const generateClientId = () => {
@@ -28,8 +28,8 @@ export default function FormAdminBuilder() {
     description: "",
     headerColor: "#7E0C0E",
     coverImage: "",
-    isActive: true,
-    isClosed: false,
+    isActive: false,
+    isClosed: true,
     questions: [
       {
         id: "Name",
@@ -48,6 +48,8 @@ export default function FormAdminBuilder() {
   const [loading, setLoading] = useState(true);
   const [coverFile, setCoverFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [descriptionText, setDescriptionText] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (formId === "new") {
@@ -74,14 +76,31 @@ export default function FormAdminBuilder() {
 
         const data = formSnap.data();
 
+        // Clean description: remove &nbsp; and convert HTML tags to markdown
+        let cleanDescription = data.description || "";
+        // Remove &nbsp;
+        cleanDescription = cleanDescription.replace(/&nbsp;/g, ' ');
+        // Convert HTML bold to markdown
+        cleanDescription = cleanDescription.replace(/<b>(.*?)<\/b>/g, '**$1**');
+        cleanDescription = cleanDescription.replace(/<strong>(.*?)<\/strong>/g, '**$1**');
+        // Convert HTML italic to markdown
+        cleanDescription = cleanDescription.replace(/<i>(.*?)<\/i>/g, '*$1*');
+        cleanDescription = cleanDescription.replace(/<em>(.*?)<\/em>/g, '*$1*');
+        // Convert HTML underline to markdown
+        cleanDescription = cleanDescription.replace(/<u>(.*?)<\/u>/g, '__$1__');
+        // Convert <br> to newlines
+        cleanDescription = cleanDescription.replace(/<br\s*\/?>/g, '\n');
+        // Remove any remaining HTML tags
+        cleanDescription = cleanDescription.replace(/<[^>]*>/g, '');
+
         setForm({
           id: formId,
           title: data.title || "Untitled Form",
-          description: data.description || "",
+          description: cleanDescription,
           headerColor: data.headerColor || "#7E0C0E",
           coverImage: data.coverImage || "",
-          isActive: data.isActive !== undefined ? data.isActive : true,
-          isClosed: data.isClosed !== undefined ? data.isClosed : false,
+          isActive: data.isActive !== undefined ? data.isActive : false,
+          isClosed: data.isClosed !== undefined ? data.isClosed : true,
           questions: data.questions?.map((q) => ({
             id: q.id || generateClientId(),
             type: q.type,
@@ -91,6 +110,9 @@ export default function FormAdminBuilder() {
             imageUrl: q.imageUrl || "",
           })) || [],
         });
+
+        // Set description text
+        setDescriptionText(cleanDescription);
 
       } catch (error) {
         console.error(error);
@@ -309,7 +331,6 @@ export default function FormAdminBuilder() {
           coverImage: coverImageUrl,
           isActive: form.isActive,
           isClosed: form.isClosed,
-          published: true,
           createdBy: user.uid,
         });
 
@@ -352,8 +373,8 @@ export default function FormAdminBuilder() {
           description: "",
           headerColor: "#7E0C0E",
           coverImage: "",
-          isActive: true,
-          isClosed: false,
+          isActive: false,
+          isClosed: true,
           questions: [
             {
               id: generateClientId(),
@@ -364,6 +385,7 @@ export default function FormAdminBuilder() {
             },
           ],
         });
+        setDescriptionText("");
         alert("Blank form reset.");
       }
 
@@ -430,8 +452,6 @@ export default function FormAdminBuilder() {
 
           if (!["b", "strong", "br"].includes(tag)) {
             const parent = child.parentNode;
-            if (!parent) continue;
-
             while (child.firstChild) {
               parent.insertBefore(child.firstChild, child);
             }
@@ -442,9 +462,18 @@ export default function FormAdminBuilder() {
         }
       }
     };
-
     walk(div);
     return div.innerHTML;
+  };
+
+  // Helper function to format description text for preview
+  const formatDescriptionText = (text) => {
+    if (!text) return "";
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+      .replace(/\*(.*?)\*/g, '<i>$1</i>')
+      .replace(/__(.*?)__/g, '<u>$1</u>')
+      .replace(/\n/g, '<br>');
   };
 
   // Show loading state while checking auth
@@ -507,7 +536,7 @@ export default function FormAdminBuilder() {
               <span className="text-sm text-gray-500">Active</span>
               <button
                 onClick={() => updateFormMeta("isActive", !form.isActive)}
-                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isActive ? "bg-[#7E0C0E]" : "bg-gray-300"
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isActive ? "bg-green-500" : "bg-gray-300"
                   }`}
               >
                 <div
@@ -515,17 +544,6 @@ export default function FormAdminBuilder() {
                     }`}
                 />
               </button>
-              <span className="text-sm">
-                {form.isActive ? (
-                  <span className="flex items-center gap-1 text-green-600">
-                    <Eye size={16} /> Live
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-gray-400">
-                    <EyeOff size={16} /> Hidden
-                  </span>
-                )}
-              </span>
             </div>
 
             {/* Separator */}
@@ -533,17 +551,6 @@ export default function FormAdminBuilder() {
 
             {/* Closed Toggle Switch */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Closed</span>
-              <button
-                onClick={() => updateFormMeta("isClosed", !form.isClosed)}
-                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isClosed ? "bg-red-500" : "bg-gray-300"
-                  }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.isClosed ? "left-6" : "left-0.5"
-                    }`}
-                />
-              </button>
               <span className="text-sm">
                 {form.isClosed ? (
                   <span className="flex items-center gap-1 text-red-500">
@@ -555,6 +562,16 @@ export default function FormAdminBuilder() {
                   </span>
                 )}
               </span>
+              <button
+                onClick={() => updateFormMeta("isClosed", !form.isClosed)}
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isClosed ? "bg-gray-300" : "bg-green-500"
+                  }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.isClosed ? "left-0.5" : "left-6"
+                    }`}
+                />
+              </button>
             </div>
 
             {showDeleteConfirm ? (
@@ -628,24 +645,162 @@ export default function FormAdminBuilder() {
               className="w-full text-3xl font-bold text-gray-800 border-0 border-b-2 border-transparent focus:border-[#7E0C0E] outline-none transition-all duration-200 px-2 py-1"
               placeholder="Form Title"
             />
-            <div
-              contentEditable
-              suppressContentEditableWarning
-              data-placeholder="Form description (optional)"
-              onBlur={(e) => {
-                const clean = sanitizeBoldOnly(e.currentTarget.innerHTML);
-                updateFormMeta("description", clean);
-              }}
-              onPaste={(e) => {
-                e.preventDefault();
-                const text = e.clipboardData.getData("text/plain");
-                document.execCommand("insertText", false, text);
-              }}
-              dangerouslySetInnerHTML={{ __html: form.description || "" }}
-              className="w-full text-gray-500 outline-none min-h-[40px] px-2 py-1 
-             border-b-2 border-transparent focus:border-[#7E0C0E] 
-             transition-all duration-200"
-            />
+
+            {/* Description with formatting */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => {
+                    const textarea = document.getElementById('description-textarea');
+                    const start = textarea.selectionStart;
+                    const end = textarea.selectionEnd;
+                    const text = descriptionText;
+
+                    if (start === end) {
+                      const newText = text.substring(0, start) + '**bold**' + text.substring(start);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 2;
+                        textarea.selectionEnd = start + 6;
+                        textarea.focus();
+                      }, 0);
+                    } else {
+                      const selectedText = text.substring(start, end);
+                      const newText = text.substring(0, start) + '**' + selectedText + '**' + text.substring(end);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 2;
+                        textarea.selectionEnd = end + 2;
+                        textarea.focus();
+                      }, 0);
+                    }
+                  }}
+                  className="px-3 py-1 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                  title="Bold (**text**)"
+                >
+                  <b>B</b>
+                </button>
+                <button
+                  onClick={() => {
+                    const textarea = document.getElementById('description-textarea');
+                    const start = textarea.selectionStart;
+                    const end = textarea.selectionEnd;
+                    const text = descriptionText;
+
+                    if (start === end) {
+                      const newText = text.substring(0, start) + '*italic*' + text.substring(start);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 1;
+                        textarea.selectionEnd = start + 7;
+                        textarea.focus();
+                      }, 0);
+                    } else {
+                      const selectedText = text.substring(start, end);
+                      const newText = text.substring(0, start) + '*' + selectedText + '*' + text.substring(end);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 1;
+                        textarea.selectionEnd = end + 1;
+                        textarea.focus();
+                      }, 0);
+                    }
+                  }}
+                  className="px-3 py-1 text-sm italic text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                  title="Italic (*text*)"
+                >
+                  <i>I</i>
+                </button>
+                <button
+                  onClick={() => {
+                    const textarea = document.getElementById('description-textarea');
+                    const start = textarea.selectionStart;
+                    const end = textarea.selectionEnd;
+                    const text = descriptionText;
+
+                    if (start === end) {
+                      const newText = text.substring(0, start) + '__underline__' + text.substring(start);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 2;
+                        textarea.selectionEnd = start + 12;
+                        textarea.focus();
+                      }, 0);
+                    } else {
+                      const selectedText = text.substring(start, end);
+                      const newText = text.substring(0, start) + '__' + selectedText + '__' + text.substring(end);
+                      setDescriptionText(newText);
+                      updateFormMeta("description", newText);
+                      setTimeout(() => {
+                        textarea.selectionStart = start + 2;
+                        textarea.selectionEnd = end + 2;
+                        textarea.focus();
+                      }, 0);
+                    }
+                  }}
+                  className="px-3 py-1 text-sm underline text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                  title="Underline (__text__)"
+                >
+                  <u>U</u>
+                </button>
+                <span className="text-xs text-gray-400 ml-2">
+                  Use **bold**, *italic*, __underline__
+                </span>
+              </div>
+
+              <textarea
+                id="description-textarea"
+                value={descriptionText}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setDescriptionText(value);
+                  updateFormMeta("description", value);
+                }}
+                placeholder="Form description (optional) - use **bold**, *italic*, __underline__"
+                className="w-full text-gray-500 outline-none min-h-[150px] px-2 py-1 
+                  border-b-2 border-transparent focus:border-[#7E0C0E] 
+                  transition-all duration-200 resize-y"
+                rows={8}
+              />
+
+              {/* Preview Toggle Button */}
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  {showPreview ? (
+                    <>
+                      <EyeOffIcon size={16} />
+                      Hide Preview
+                    </>
+                  ) : (
+                    <>
+                      <EyeIcon size={16} />
+                      Show Preview
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Preview - only shown when toggled on */}
+              {showPreview && descriptionText && (
+                <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-500 mb-1">Preview:</p>
+                  <div
+                    className="text-gray-700"
+                    dangerouslySetInnerHTML={{
+                      __html: formatDescriptionText(descriptionText)
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
