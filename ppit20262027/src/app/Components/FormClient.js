@@ -6,7 +6,7 @@ import { auth, db } from "../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { getDoc, doc } from "firebase/firestore";
-import { CheckCircle, ArrowLeft, Upload, FileText, AlertCircle } from "lucide-react";
+import { CheckCircle, ArrowLeft, Upload, FileText, AlertCircle, ArrowRight } from "lucide-react";
 
 export default function FormClient({ form }) {
   const [user, setUser] = useState(null);
@@ -39,12 +39,22 @@ export default function FormClient({ form }) {
     return () => unsub();
   }, []);
 
+  // Helper function to format description with markdown
+  const formatDescription = (text) => {
+    if (!text) return "";
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/__(.*?)__/g, '<u>$1</u>')
+      .replace(/\n/g, '<br>');
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#7E0C0E] border-t-transparent"></div>
-          <p className="mt-4 text-gray-500 font-medium">Loading form...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
+          <p className="mt-4 text-white/70 font-medium">Loading form...</p>
         </div>
       </div>
     );
@@ -52,8 +62,8 @@ export default function FormClient({ form }) {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center">
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">🔒</div>
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">Please Log In</h2>
           <p className="text-gray-500">You need to be logged in to submit this form.</p>
@@ -64,8 +74,8 @@ export default function FormClient({ form }) {
 
   if (formSubmitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center">
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">📝</div>
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">Already Submitted</h2>
           <p className="text-gray-500 mb-6">You have already submitted this form. Each user can only submit once.</p>
@@ -83,8 +93,8 @@ export default function FormClient({ form }) {
 
   if (submitting) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-sm w-full text-center">
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#7E0C0E] border-t-transparent mb-4"></div>
           <h3 className="text-lg font-semibold text-gray-800">Submitting...</h3>
           <p className="text-gray-500 text-sm">Please wait while we process your submission.</p>
@@ -95,8 +105,8 @@ export default function FormClient({ form }) {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center">
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
           <div className="flex justify-center mb-4">
             <CheckCircle size={64} className="text-green-500" />
           </div>
@@ -188,42 +198,46 @@ export default function FormClient({ form }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-3xl mx-auto">
-        {/* Form Card */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          {/* Header */}
-          <div className="bg-[#7E0C0E] px-8 py-6">
-            <h1 className="text-2xl font-semibold text-white text-center">
+    <div className="min-h-screen bg-[#7E0C0E] py-12 px-4 pt-24 font-montserrat">
+      <div className="max-w-4xl mx-auto">
+        {/* Form Header Card - Single box with outline and white background */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-2 border-[#7E0C0E] mb-6">
+          {/* Header with white background and black text */}
+          <div className="px-8 py-8 bg-white border-b border-gray-200">
+            <h1 className="text-4xl font-bold text-gray-900 text-center leading-snug tracking-tight mb-8">
               {form.title}
             </h1>
             {form.description && (
-              <p
-                className="text-gray-200 text-sm text-center mt-2"
+              <div
+                className="text-gray-600 text-sm text-center mt-3 leading-relaxed max-w-2xl mx-auto"
                 style={{ whiteSpace: "pre-line" }}
-                dangerouslySetInnerHTML={{ __html: form.description }}
+                dangerouslySetInnerHTML={{ __html: formatDescription(form.description) }}
               />
             )}
           </div>
+        </div>
 
-          {/* Form Body */}
-          <div className="p-8 space-y-8">
-            {form.questions.map((q, index) => (
-              <div key={q.id} className="space-y-2">
-                {/* Question Label */}
-                <label
-                  className="block text-sm font-medium text-gray-700"
-                  style={{ whiteSpace: "pre-line" }}
-                  dangerouslySetInnerHTML={{
-                    __html: (q.type === "info"
-                      ? `<span style="font-weight: normal; color: #6B7280;">${q.label}</span>`
-                      : q.label) + (q.required && q.type !== "info" ? ' <span style="color: #EF4444;">*</span>' : '')
-                  }}
-                />
+        {/* Question Cards - Each in its own box */}
+        <div className="space-y-4 mt-3">
+          {form.questions.map((q, index) => (
+            <div key={q.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-7 py-9">
+                {/* Question Label - slightly smaller */}
+                <div className="flex items-start gap-1 mb-4">
+                  <label
+                    className="text-[18px] font-semibold text-gray-800"
+                    style={{ whiteSpace: "pre-line" }}
+                    dangerouslySetInnerHTML={{
+                      __html: (q.type === "info"
+                        ? `<span style="font-weight: 800; color: #6B7280; font-size: 15px;">${q.label}</span>`
+                        : q.label) + (q.required && q.type !== "info" ? ' <span style="color: #D32F2F;">*</span>' : '')
+                    }}
+                  />
+                </div>
 
                 {/* Image Display */}
                 {q.type === "image" && q.imageUrl && (
-                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <div className="rounded-lg overflow-hidden border border-gray-200 mb-2">
                     <img
                       src={q.imageUrl}
                       alt="Form content"
@@ -236,8 +250,8 @@ export default function FormClient({ form }) {
                 {q.type === "text" && (
                   <input
                     type="text"
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white"
-                    placeholder="Enter your answer..."
+                    className="w-full border-0 border-b-2 border-gray-300 px-0 py-2 text-gray-800 text-[14px] focus:outline-none focus:border-[#7E0C0E] transition-colors duration-200 bg-transparent"
+                    placeholder="Your answer"
                     value={answers[q.id] || ""}
                     onChange={(e) =>
                       setAnswers({ ...answers, [q.id]: e.target.value })
@@ -248,9 +262,9 @@ export default function FormClient({ form }) {
                 {/* Textarea */}
                 {q.type === "textarea" && (
                   <textarea
-                    rows={4}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white resize-none"
-                    placeholder="Enter your answer..."
+                    rows={3}
+                    className="w-full border-0 border-b-2 border-gray-300 px-0 py-2 text-gray-800 text-[14px] focus:outline-none focus:border-[#7E0C0E] transition-colors duration-200 bg-transparent resize-none"
+                    placeholder="Your answer"
                     value={answers[q.id] || ""}
                     onChange={(e) =>
                       setAnswers({ ...answers, [q.id]: e.target.value })
@@ -275,17 +289,17 @@ export default function FormClient({ form }) {
                     />
                     <label
                       htmlFor={`file-${q.id}`}
-                      className="flex items-center justify-center gap-3 w-full rounded-xl border-2 border-dashed border-gray-300 px-6 py-8 cursor-pointer hover:border-[#7E0C0E] transition-all duration-200 bg-gray-50 hover:bg-gray-100 group"
+                      className="flex items-center justify-center gap-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-6 py-7 cursor-pointer hover:border-[#7E0C0E] transition-all duration-200 bg-gray-50 hover:bg-gray-100 group"
                     >
-                      <Upload size={24} className="text-gray-400 group-hover:text-[#7E0C0E] transition-colors" />
-                      <span className="text-gray-500 group-hover:text-gray-700 transition-colors">
-                        {fileName[q.id] || "Click to upload or drag and drop"}
+                      <Upload size={22} className="text-gray-400 group-hover:text-[#7E0C0E] transition-colors" />
+                      <span className="text-gray-500 group-hover:text-gray-700 transition-colors text-[18px]">
+                        {fileName[q.id] || "Upload file"}
                       </span>
-                      {fileName[q.id] && <FileText size={18} className="text-[#7E0C0E]" />}
+                      {fileName[q.id] && <FileText size={16} className="text-[#7E0C0E]" />}
                     </label>
                     {fileName[q.id] && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        Selected: {fileName[q.id]}
+                      <p className="text-[12px] text-gray-500 mt-1">
+                        {fileName[q.id]}
                       </p>
                     )}
                   </div>
@@ -293,11 +307,11 @@ export default function FormClient({ form }) {
 
                 {/* Radio Options */}
                 {q.type === "radio" && q.options && (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {q.options.map((opt) => (
                       <label
                         key={opt}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#7E0C0E] transition-all duration-200 cursor-pointer bg-gray-50 hover:bg-white group"
+                        className="flex items-center gap-3 cursor-pointer group"
                       >
                         <input
                           type="radio"
@@ -307,9 +321,9 @@ export default function FormClient({ form }) {
                           onChange={() =>
                             setAnswers({ ...answers, [q.id]: opt })
                           }
-                          className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 cursor-pointer"
+                          className="w-3.5 h-3.5 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 cursor-pointer"
                         />
-                        <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+                        <span className="text-[15px] text-gray-700 group-hover:text-gray-900 transition-colors">
                           {opt}
                         </span>
                       </label>
@@ -319,11 +333,11 @@ export default function FormClient({ form }) {
 
                 {/* Checkbox Options */}
                 {q.type === "checkbox" && q.options && (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {q.options.map((opt) => (
                       <label
                         key={opt}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-[#7E0C0E] transition-all duration-200 cursor-pointer bg-gray-50 hover:bg-white group"
+                        className="flex items-center gap-3 cursor-pointer group"
                       >
                         <input
                           type="checkbox"
@@ -340,9 +354,9 @@ export default function FormClient({ form }) {
                               };
                             });
                           }}
-                          className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 rounded cursor-pointer"
+                          className="w-3.5 h-3.5 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 rounded cursor-pointer"
                         />
-                        <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+                        <span className="text-[15px] text-gray-700 group-hover:text-gray-900 transition-colors">
                           {opt}
                         </span>
                       </label>
@@ -350,45 +364,63 @@ export default function FormClient({ form }) {
                   </div>
                 )}
               </div>
-            ))}
-
-            {/* Error Message */}
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
-                <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <div className="pt-4">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || success}
-                className="w-full bg-[#7E0C0E] text-white px-8 py-3.5 rounded-xl font-medium
-                          hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md
-                          transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed
-                          disabled:transform-none disabled:hover:shadow-sm"
-              >
-                {submitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
-                    Submitting...
-                  </span>
-                ) : success ? (
-                  "Submitted ✓"
-                ) : (
-                  "Submit Form"
-                )}
-              </button>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Footer Note */}
-        <p className="text-center text-sm text-gray-500 mt-6">
-          * Required fields are marked with <span className="text-red-500">*</span>
+        {/* Error Message */}
+        {error && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-3 mt-3">
+            <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-red-600 text-xs">{error}</p>
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div className="mt-6 flex items-center gap-4 font-montserrat">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || success}
+            className="relative bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm
+              hover:bg-gray-100 hover:shadow-lg transition-all duration-200 
+              active:scale-95 active:shadow-sm
+              disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+              shadow-md border-2 border-white hover:border-[#7E0C0E]/20
+              overflow-hidden group"
+          >
+            {/* Ripple effect background */}
+            <span className="absolute inset-0 bg-gradient-to-r from-[#7E0C0E]/0 via-[#7E0C0E]/5 to-[#7E0C0E]/0 
+                     translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out">
+            </span>
+
+            <span className="relative flex items-center justify-center gap-2">
+              {submitting ? (
+                <>
+                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-[#7E0C0E] border-t-transparent"></span>
+                  <span>Submitting...</span>
+                </>
+              ) : success ? (
+                <>
+                  <CheckCircle size={16} className="text-green-500" />
+                  <span>Submitted ✓</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit</span>
+                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
+                </>
+              )}
+            </span>
+          </button>
+          <span className="text-xs text-white/70 font-medium">
+            * Required fields
+          </span>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-white/40 mt-6">
+          Never submit passwords through this form.
         </p>
       </div>
     </div>

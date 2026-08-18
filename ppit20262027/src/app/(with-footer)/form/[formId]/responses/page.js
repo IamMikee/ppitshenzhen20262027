@@ -360,7 +360,7 @@ export default function ResponsesPage() {
                                                     type="text"
                                                     value={inputValue}
                                                     onChange={handleInputChange}
-                                                    className="w-12 text-center border border-gray-300 rounded-lg px-1 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                                                    className="w-12 text-center border border-gray-300 rounded-lg px-1 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent text-gray-600"
                                                 />
                                                 <span className="text-gray-500">of {responses.length}</span>
                                             </div>
