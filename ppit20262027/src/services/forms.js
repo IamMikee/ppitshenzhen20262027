@@ -105,6 +105,7 @@ export async function submitResponse(formId, questions, answers) {
   const docRef = await addDoc(collection(db, "forms", formId, "responses"), {
     answers,
     submittedBy: userId,
+    userEmail: userEmail,
     submittedAt: serverTimestamp(),
   });
 

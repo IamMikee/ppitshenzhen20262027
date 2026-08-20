@@ -16,6 +16,7 @@ export default function FormClient({ form }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [formClosed, setFormClosed] = useState(false);
   const [fileName, setFileName] = useState({});
   const router = useRouter();
 
@@ -23,17 +24,27 @@ export default function FormClient({ form }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      setLoading(false);
-      try {
-        const ref = doc(db, "users", u.uid);
-        const snapshot = await getDoc(ref);
-        const submittedForms = snapshot.data().submittedForms;
-        if (submittedForms.includes(form.id)) {
-          setFormSubmitted(true);
+      if (u) {
+        try {
+          // Check form status (isClosed) and user submission together
+          const [userSnap, formSnap] = await Promise.all([
+            getDoc(doc(db, "users", u.uid)),
+            getDoc(doc(db, "forms", form.id))
+          ]);
+
+          const submittedForms = userSnap.data()?.submittedForms || [];
+          if (submittedForms.includes(form.id)) {
+            setFormSubmitted(true);
+          }
+
+          if (formSnap.exists() && formSnap.data().isClosed === true) {
+            setFormClosed(true);
+          }
+        } catch (e) {
+          console.error("Error checking status:", e);
         }
-      } catch (e) {
-        console.error("error in checking status" + e)
       }
+      setLoading(false);
     });
 
     return () => unsub();
@@ -72,20 +83,55 @@ export default function FormClient({ form }) {
     );
   }
 
+  if (formClosed) {
+    return (
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6 font-montserrat">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-full mb-4">
+              <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Form is Closed</h2>
+            <div className="h-1 w-16 bg-[#7E0C0E] mx-auto rounded-full mb-4"></div>
+            <p className="text-gray-600 mb-4">This form is currently closed and not accepting new submissions.</p>
+            <p className="text-gray-400 text-sm mb-6">Please contact the administrator if you have questions.</p>
+            <button
+              onClick={() => router.push('/form')}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+            >
+              <ArrowLeft size={18} />
+              Back to Forms
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (formSubmitted) {
     return (
-      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <div className="text-6xl mb-4">📝</div>
-          <h2 className="text-2xl font-semibold text-gray-800 mb-2">Already Submitted</h2>
-          <p className="text-gray-500 mb-6">You have already submitted this form. Each user can only submit once.</p>
-          <button
-            onClick={() => router.push('/form')}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
-          >
-            <ArrowLeft size={18} />
-            Back to Forms
-          </button>
+      <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6 font-montserrat">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-4">
+              <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Already Submitted</h2>
+            <div className="h-1 w-16 bg-[#7E0C0E] mx-auto rounded-full mb-4"></div>
+            <p className="text-gray-600 mb-4">You have already submitted this form.</p>
+            <p className="text-gray-400 text-sm mb-6">Each user can only submit once.</p>
+            <button
+              onClick={() => router.push('/form')}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+            >
+              <ArrowLeft size={18} />
+              Back to Forms
+            </button>
+          </div>
         </div>
       </div>
     );

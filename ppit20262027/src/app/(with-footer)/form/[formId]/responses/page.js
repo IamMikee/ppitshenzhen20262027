@@ -215,8 +215,14 @@ export default function ResponsesPage() {
         const value = e.target.value;
         setInputValue(value);
         if (value === "") return;
-        const num = parseInt(value);
-        if (!isNaN(num) && num >= 1 && num <= responses.length) {
+        const num = Number(value);
+        if (num > responses.length) {
+            setCurrentIndex(responses.length - 1);
+            setInputValue(responses.length);
+        } else if (isNaN(num) || num < 1) {
+            setCurrentIndex(0);
+            setInputValue(1);
+        } else {
             setCurrentIndex(num - 1);
         }
     };

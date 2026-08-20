@@ -175,7 +175,7 @@ export default function Home() {
 									Di tahun yang sama, Perhimpunan Pelajar Indonesia di Tiongkok
 									ranting Shenzhen (PPITSZ) resmi berdiri sebagai ranting dari
 									cabang Guangzhou. Kepengurusan pertama PPITSZ dipimpin oleh
-									Saudara Ivan Prawira Limanauwyang juga merupakan salah satu
+									Saudara Ivan Prawira Limanauw yang juga merupakan salah satu
 									inisiator berdirinya organisasi ini. Setelah melewati satu periode
 									kepengerusan, PPITSZ akhirnya disahkan sebagai cabang pada tahun
 									2019. Saat ini, PPITSZ menaungi lebih dari 500 pelajar aktif yang
