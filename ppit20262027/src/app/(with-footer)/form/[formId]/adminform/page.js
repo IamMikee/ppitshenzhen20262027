@@ -533,7 +533,7 @@ export default function FormAdminBuilder() {
           <div className="flex items-center gap-4 flex-wrap">
             {/* Active Toggle Switch */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Active</span>
+              <span className="text-sm text-gray-500">Show</span>
               <button
                 onClick={() => updateFormMeta("isActive", !form.isActive)}
                 className={`relative w-12 h-6 rounded-full transition-all duration-300 ${form.isActive ? "bg-green-500" : "bg-gray-300"

@@ -167,31 +167,42 @@ export default function ResponsesPage() {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
         try {
-            const res = await fetch("/api/sheets", {
-                method: "POST",
-                body: JSON.stringify({
-                    formId,
-                    responses,
-                    questions,
-                }),
-            });
+            const formDocRef = doc(db, "forms", formId);
+            const formDoc = await getDoc(formDocRef);
 
-            const data = await res.json();
-            setLoadingSheets(false);
-
-            if (data.url) {
-                if (isMobile) {
-                    window.location.href = data.url
-                } else {
-                    window.open(data.url, "_blank");
-                }
-            } else if (data.error) {
-                alert("Failed to create spreadsheet: " + data.error);
+            if (!formDoc.exists()) {
+                setLoadingSheets(false);
+                alert("Form not found.");
+                return;
             }
-        } catch (e) {
-            console.error("Network error: " + e);
+
+            const formData = formDoc.data();
+            const sheetId = formData.sheetId;
+
+            if (!sheetId) {
+                setLoadingSheets(false);
+                alert("No spreadsheet found for this form. Please wait for the scheduled sync to run.");
+                return;
+            }
+
+            const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+
+            console.log(`📊 Opening sheet: ${sheetUrl}`);
+
             setLoadingSheets(false);
-            alert("Failed to connect to server.");
+
+            if (isMobile) {
+                // For mobile, navigate to the URL
+                window.location.href = sheetUrl;
+            } else {
+                // For desktop, open in new tab
+                window.open(sheetUrl, "_blank");
+            }
+
+        } catch (error) {
+            console.error("Error opening sheet:", error);
+            setLoadingSheets(false);
+            alert("Failed to open spreadsheet: " + error.message);
         }
     };
 
@@ -276,16 +287,16 @@ export default function ResponsesPage() {
         );
     }
 
-    if (loadingSheets) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#7E0C0E] border-t-transparent mb-4"></div>
-                    <p className="text-gray-500 font-medium">Creating Google Sheets...</p>
-                </div>
-            </div>
-        );
-    }
+    // if (loadingSheets) {
+    //     return (
+    //         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    //             <div className="text-center">
+    //                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#7E0C0E] border-t-transparent mb-4"></div>
+    //                 <p className="text-gray-500 font-medium">Creating Google Sheets...</p>
+    //             </div>
+    //         </div>
+    //     );
+    // }
 
     const currentResponse = responses[currentIndex];
 
@@ -300,8 +311,8 @@ export default function ResponsesPage() {
                             <button
                                 onClick={() => setViewMode("perSubmission")}
                                 className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 ${viewMode === "perSubmission"
-                                        ? "bg-[#7E0C0E] text-white shadow-md"
-                                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                    ? "bg-[#7E0C0E] text-white shadow-md"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                                     }`}
                             >
                                 <LayoutGrid size={18} />
@@ -310,8 +321,8 @@ export default function ResponsesPage() {
                             <button
                                 onClick={() => setViewMode("all")}
                                 className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 ${viewMode === "all"
-                                        ? "bg-[#7E0C0E] text-white shadow-md"
-                                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                    ? "bg-[#7E0C0E] text-white shadow-md"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                                     }`}
                             >
                                 <List size={18} />
@@ -329,9 +340,19 @@ export default function ResponsesPage() {
                             </button>
                             <button
                                 onClick={openInSheets}
-                                className="bg-[#7E0C0E] text-white px-4 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+                                disabled={loadingSheets}
+                                className={`bg-[#7E0C0E] text-white px-4 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5 ${loadingSheets ? 'opacity-50 cursor-not-allowed hover:transform-none hover:shadow-sm' : ''}`}
                             >
-                                Open in Sheets
+                                {loadingSheets ? (
+                                    <>
+                                        <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></span>
+                                        Opening...
+                                    </>
+                                ) : (
+                                    <>
+                                        View in Sheets
+                                    </>
+                                )}
                             </button>
                         </div>
                         <div className="ml-auto text-sm text-gray-500">
