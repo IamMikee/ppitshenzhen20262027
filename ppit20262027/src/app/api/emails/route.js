@@ -5,7 +5,8 @@ import {
     getBirthdayTemplates,
     createEmailSend,
     sendEmails,
-    updateEmailStatus
+    updateEmailStatus,
+    getEmailWrapper
 } from '../../../services/email';
 
 // ============================================================
@@ -107,7 +108,7 @@ export async function POST(request) {
         const emailContent = {
             subject: content.subject || 'Broadcast Email',
             text: content.text,
-            html: content.text?.replace(/\n/g, '<br>') || '',
+            html: getEmailWrapper(content.html || content.text?.replace(/\n/g, '<br>') || ''),
             attachments: attachments, // Cloudinary URLs for storage
         };
 

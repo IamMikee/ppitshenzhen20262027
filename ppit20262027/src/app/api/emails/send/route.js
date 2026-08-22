@@ -1,4 +1,3 @@
-// src/app/api/emails/send/route.js
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { updateEmailStatus } from '../../../../services/email';
