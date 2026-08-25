@@ -475,43 +475,41 @@ export async function processScheduledEmails() {
 // WRAPS EMAIL IN PROPER VIEWPORT
 // ============================================================
 export function getEmailWrapper(content) {
+    // Helper function to check if content is HTML
+    const isHtml = (str) => {
+        if (!str) return false;
+        // Check for HTML tags
+        return /<[a-z][\s\S]*>/i.test(str);
+    };
+
+    let cleanContent = content;
+
+    // Only clean if it's NOT HTML (plain text)
+    if (!isHtml(content) && content) {
+        cleanContent = content
+            // Remove extra line breaks (3+ becomes 2)
+            .replace(/\n{3,}/g, '\n\n')
+            // Remove extra spaces (2+ becomes 1)
+            .replace(/[ ]{2,}/g, ' ')
+            // Remove tabs
+            .replace(/\t/g, '')
+            // Remove spaces at start of lines
+            .replace(/^[ ]+/gm, '')
+            // Remove trailing spaces
+            .replace(/[ ]+$/gm, '')
+            .trim();
+    }
+
     return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>Email</title>
-  
   <style>
-    /* Gmail-specific styles */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     
-    /* This prevents Gmail from resizing fonts on mobile */
-    body, 
-    .body, 
-    .container, 
-    .content, 
-    .main-content,
-    table, 
-    td, 
-    p, 
-    a, 
-    div, 
-    span,
-    h1, h2, h3, h4, h5, h6 {
-      -webkit-text-size-adjust: 100% !important;
-      -ms-text-size-adjust: 100% !important;
-      mso-text-size-adjust: 100% !important;
-      text-size-adjust: 100% !important;
-    }
-    
-    /* Reset body */
     body {
       margin: 0;
       padding: 0;
@@ -519,7 +517,6 @@ export function getEmailWrapper(content) {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
-    /* Main container - this is crucial for mobile */
     .email-container {
       max-width: 600px;
       width: 100%;
@@ -528,103 +525,64 @@ export function getEmailWrapper(content) {
       background-color: #ffffff;
     }
     
-    /* All text must have explicit sizes */
-    .email-container * {
-      font-size: 14px;
-      line-height: 1.6;
+    .email-container .content-wrapper {
+      word-wrap: break-word !important;
     }
     
     .email-container h1 {
-      font-size: 28px !important;
-      line-height: 1.2 !important;
       margin: 0 0 15px 0 !important;
+      font-size: 24px !important;
     }
     
     .email-container h2 {
-      font-size: 24px !important;
-      line-height: 1.3 !important;
       margin: 0 0 12px 0 !important;
+      font-size: 20px !important;
     }
     
     .email-container h3 {
-      font-size: 20px !important;
-      line-height: 1.4 !important;
       margin: 0 0 10px 0 !important;
+      font-size: 18px !important;
     }
     
     .email-container p {
-      font-size: 14px !important;
-      line-height: 1.6 !important;
       margin: 0 0 12px 0 !important;
-    }
-    
-    .email-container div,
-    .email-container span,
-    .email-container li {
       font-size: 14px !important;
       line-height: 1.6 !important;
     }
     
-    /* Images - make them responsive */
-    .email-container img {
-      max-width: 100% !important;
-      height: auto !important;
-      display: block !important;
+    .email-container ul {
+      margin: 8px 0 12px 20px !important;
+      padding: 0 !important;
     }
     
-    /* Gmail app specific fixes */
-    u + .body .email-container {
-      width: 100% !important;
+    .email-container li {
+      margin: 0 0 6px 0 !important;
+      font-size: 14px !important;
+      line-height: 1.6 !important;
     }
     
-    /* Outlook and older clients */
-    .ReadMsgBody {
-      width: 100% !important;
-    }
-    .ExternalClass {
-      width: 100% !important;
-    }
-    .ExternalClass,
-    .ExternalClass p,
-    .ExternalClass span,
-    .ExternalClass font,
-    .ExternalClass td,
-    .ExternalClass div {
-      line-height: 100% !important;
+    /* Preserve line breaks for non-HTML content */
+    .email-container .text-content {
+      white-space: pre-wrap !important;
     }
     
-    /* Mobile-specific adjustments */
     @media only screen and (max-width: 480px) {
       .email-container {
         padding: 15px 10px !important;
-        width: 100% !important;
-      }
-      
-      .email-container h1 {
-        font-size: 24px !important;
-      }
-      
-      .email-container h2 {
-        font-size: 20px !important;
-      }
-      
-      .email-container h3 {
-        font-size: 18px !important;
-      }
-      
-      .email-container p,
-      .email-container div,
-      .email-container span {
-        font-size: 14px !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="email-container">
-    ${content}
+    <div class="content-wrapper">
+      ${isHtml(cleanContent)
+            ? cleanContent
+            : `<div class="text-content">${cleanContent}</div>`
+        }
+    </div>
   </div>
 </body>
 </html>
   `;
-};
+}

@@ -17,15 +17,15 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
     const fetchDatabaseRecipients = async () => {
         setLoading(true);
         try {
-            const endpoint = type === 'birthday' 
+            const endpoint = type === 'birthday'
                 ? '/api/emails?type=birthday-recipients'
                 : '/api/emails?type=recipients';
             const response = await fetch(endpoint);
             const data = await response.json();
-            
+
             const users = data.recipients || [];
             setDatabaseRecipients(users);
-            
+
             // Organize users by cohort year
             const groups = {};
             users.forEach(user => {
@@ -36,7 +36,7 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                 groups[cohort].push(user);
             });
             setCohortGroups(groups);
-            
+
             // Pre-select any that are already in selectedRecipients
             const preSelected = users
                 .filter(r => selectedRecipients.includes(r.email))
@@ -67,10 +67,10 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
     const toggleGroup = (cohortYear) => {
         const groupEmails = cohortGroups[cohortYear].map(user => user.email);
         const allSelected = groupEmails.every(email => selectedDbRecipients.includes(email));
-        
+
         let newSelection;
         let newGroupSelection;
-        
+
         if (allSelected) {
             // Remove all from this cohort
             newSelection = selectedDbRecipients.filter(email => !groupEmails.includes(email));
@@ -81,15 +81,18 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
             newSelection = [...selectedDbRecipients, ...toAdd];
             newGroupSelection = [...selectedGroups, cohortYear];
         }
-        
+
         setSelectedDbRecipients(newSelection);
         setSelectedGroups(newGroupSelection);
-        
-        // Update main recipients list
+
+        // Update main recipients list with duplicates removed
         const otherRecipients = selectedRecipients.filter(
             r => !databaseRecipients.some(db => db.email === r)
         );
-        onRecipientsChange([...otherRecipients, ...newSelection]);
+        const combined = [...otherRecipients, ...newSelection];
+        // Remove duplicates from the entire selection
+        const uniqueRecipients = [...new Set(combined)];
+        onRecipientsChange(uniqueRecipients);
     };
 
     // Get cohort statistics
@@ -106,25 +109,28 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
         const newSelection = [...new Set([...selectedDbRecipients, ...allEmails])];
         setSelectedDbRecipients(newSelection);
         setSelectedGroups(activeCohorts);
-        
+
         const otherRecipients = selectedRecipients.filter(
             r => !databaseRecipients.some(db => db.email === r)
         );
-        onRecipientsChange([...otherRecipients, ...newSelection]);
+        const combined = [...otherRecipients, ...newSelection];
+        // Remove duplicates from the entire selection
+        const uniqueRecipients = [...new Set(combined)];
+        onRecipientsChange(uniqueRecipients);
     };
 
     // Deselect all
     const deselectAll = () => {
         setSelectedDbRecipients([]);
         setSelectedGroups([]);
-        
+
         const otherRecipients = selectedRecipients.filter(
             r => !databaseRecipients.some(db => db.email === r)
         );
-        onRecipientsChange(otherRecipients);
+        // Remove duplicates from the entire selection
+        const uniqueRecipients = [...new Set(otherRecipients)];
+        onRecipientsChange(uniqueRecipients);
     };
-
-    // ... existing handlers ...
 
     const toggleDatabaseRecipient = (email) => {
         const newSelection = selectedDbRecipients.includes(email)
@@ -132,7 +138,7 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
             : [...selectedDbRecipients, email];
 
         setSelectedDbRecipients(newSelection);
-        
+
         // Update group selection state
         const updatedGroups = [];
         Object.keys(cohortGroups).forEach(cohort => {
@@ -143,16 +149,22 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
             }
         });
         setSelectedGroups(updatedGroups);
-        
-        // Update main recipients list
+
+        // Update main recipients list with duplicates removed
         const otherRecipients = selectedRecipients.filter(
             r => !databaseRecipients.some(db => db.email === r)
         );
-        onRecipientsChange([...otherRecipients, ...newSelection]);
+        const combined = [...otherRecipients, ...newSelection];
+        // Remove duplicates from the entire selection
+        const uniqueRecipients = [...new Set(combined)];
+        onRecipientsChange(uniqueRecipients);
     };
 
     const removeRecipient = (email) => {
-        onRecipientsChange(selectedRecipients.filter(e => e !== email));
+        const newRecipients = selectedRecipients.filter(e => e !== email);
+        // Remove duplicates from the entire selection
+        const uniqueRecipients = [...new Set(newRecipients)];
+        onRecipientsChange(uniqueRecipients);
         setSelectedDbRecipients(selectedDbRecipients.filter(e => e !== email));
     };
 
@@ -171,33 +183,30 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                 <button
                     type="button"
                     onClick={() => setMode('individual')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        mode === 'individual'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'individual'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                 >
                     Individual
                 </button>
                 <button
                     type="button"
                     onClick={() => setMode('csv')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        mode === 'csv'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'csv'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                 >
                     Upload CSV
                 </button>
                 <button
                     type="button"
                     onClick={() => setMode('database')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        mode === 'database'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'database'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                 >
                     From Database
                 </button>
@@ -223,7 +232,9 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                                 if (emails.length > 0) {
                                     const existingEmails = new Set(selectedRecipients);
                                     emails.forEach(email => existingEmails.add(email));
-                                    onRecipientsChange(Array.from(existingEmails));
+                                    // Remove duplicates from the entire selection
+                                    const uniqueRecipients = Array.from(existingEmails);
+                                    onRecipientsChange(uniqueRecipients);
                                     setIndividualInput('');
                                 }
                             }}
@@ -253,10 +264,18 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                                 const emails = lines
                                     .map(line => line.trim())
                                     .filter(line => line && line.includes('@'));
+
                                 if (emails.length > 0) {
+                                    // Remove duplicates within the CSV first
+                                    const uniqueEmails = [...new Set(emails)];
+
+                                    // Merge with existing selections and remove duplicates
                                     const existingEmails = new Set(selectedRecipients);
-                                    emails.forEach(email => existingEmails.add(email));
-                                    onRecipientsChange(Array.from(existingEmails));
+                                    uniqueEmails.forEach(email => existingEmails.add(email));
+
+                                    // Final deduplication of the entire selection
+                                    const finalUniqueRecipients = Array.from(existingEmails);
+                                    onRecipientsChange(finalUniqueRecipients);
                                 }
                             };
                             reader.readAsText(file);
@@ -265,7 +284,7 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
                     <p className="text-xs text-gray-500">
-                        Upload CSV or TXT file with email addresses (one per line)
+                        Upload CSV or TXT file with email addresses (one per line) - duplicates will be removed automatically
                     </p>
                 </div>
             )}
@@ -299,19 +318,18 @@ export default function RecipientSelector({ selectedRecipients, onRecipientsChan
                                 const isSelected = selectedGroups.includes(cohort);
                                 const isAllSelected = stats.selected === stats.total && stats.total > 0;
                                 const isPartialSelected = stats.selected > 0 && stats.selected < stats.total;
-                                
+
                                 return (
                                     <button
                                         key={cohort}
                                         type="button"
                                         onClick={() => toggleGroup(cohort)}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                            isAllSelected
-                                                ? 'bg-green-500 text-white hover:bg-green-600'
-                                                : isPartialSelected
-                                                    ? 'bg-yellow-400 text-gray-800 hover:bg-yellow-500'
-                                                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                                        }`}
+                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${isAllSelected
+                                            ? 'bg-green-500 text-white hover:bg-green-600'
+                                            : isPartialSelected
+                                                ? 'bg-yellow-400 text-gray-800 hover:bg-yellow-500'
+                                                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                            }`}
                                     >
                                         {cohort === 'Unknown' ? '❓ Unknown' : `📅 ${cohort}`}
                                         <span className="ml-1 opacity-75">

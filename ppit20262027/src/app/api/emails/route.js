@@ -108,7 +108,7 @@ export async function POST(request) {
         const emailContent = {
             subject: content.subject || 'Broadcast Email',
             text: content.text,
-            html: getEmailWrapper(content.html || content.text?.replace(/\n/g, '<br>') || ''),
+            html: getEmailWrapper(content.html || content.text || ''),
             attachments: attachments, // Cloudinary URLs for storage
         };
 
