@@ -3,8 +3,8 @@ import nodemailer from 'nodemailer';
 import { updateEmailStatus } from '../../../../services/email';
 
 const MAX_RECIPIENTS_PER_EMAIL = 80;
-const DELAY_BETWEEN_BATCHES = 5000;
-const DELAY_BETWEEN_INDIVIDUAL = 2000;
+const DELAY_BETWEEN_BATCHES = 10000;
+const DELAY_BETWEEN_INDIVIDUAL = 3000;
 const RATE_LIMIT_WAIT = 30000;
 const MAX_RETRIES = 3;
 
