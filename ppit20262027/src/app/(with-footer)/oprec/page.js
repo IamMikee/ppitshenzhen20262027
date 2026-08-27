@@ -19,6 +19,8 @@ export default function RecruitmentPage() {
     const [currentStage, setCurrentStage] = useState(0);
     const [stageStatus, setStageStatus] = useState({});
     const [formSubmitted, setFormSubmitted] = useState(false);
+    const [isRejected, setIsRejected] = useState(false);
+    const [rejectedStage, setRejectedStage] = useState(-1);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -40,6 +42,12 @@ export default function RecruitmentPage() {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
     const [submitSuccess, setSubmitSuccess] = useState(false);
+
+    // Written Test state
+    const [testFile, setTestFile] = useState(null);
+    const [testFileError, setTestFileError] = useState("");
+    const [testSubmitting, setTestSubmitting] = useState(false);
+    const [testSubmitSuccess, setTestSubmitSuccess] = useState(false);
 
     // Application stages data
     const stages = [
@@ -63,13 +71,12 @@ export default function RecruitmentPage() {
         },
         {
             id: 3,
-            title: "Results",
+            title: "Accepted",
             icon: "🏆",
             color: "from-red-700 to-red-900",
         },
     ];
 
-    // 🆕 Merged divisions with names and codes
     const divisions = [
         { name: "Dana Usaha", code: "DU" },
         { name: "Departemen Olahraga", code: "DO" },
@@ -116,6 +123,19 @@ export default function RecruitmentPage() {
                         setStageStatus(appData.stageStatus || {});
                         setActiveStage(appData.currentStage || 0);
                         setFormSubmitted(true);
+
+                        // Check if rejected
+                        const statusValues = Object.values(appData.stageStatus || {});
+                        if (statusValues.includes('rejected')) {
+                            setIsRejected(true);
+                            // Find which stage was rejected
+                            for (let i = 0; i < 4; i++) {
+                                if (appData.stageStatus?.[i] === 'rejected') {
+                                    setRejectedStage(i);
+                                    break;
+                                }
+                            }
+                        }
                     } else {
                         // No application yet - set initial state
                         const initialStatus = {
@@ -128,6 +148,7 @@ export default function RecruitmentPage() {
                         setCurrentStage(0);
                         setActiveStage(0);
                         setFormSubmitted(false);
+                        setIsRejected(false);
                     }
                 } catch (error) {
                     console.error("Error fetching data:", error);
@@ -145,7 +166,8 @@ export default function RecruitmentPage() {
 
     // Check if a stage is clickable (completed or pending)
     const isStageClickable = (stageIndex) => {
-        if (stageIndex === 0) return true; // Stage 0 is always clickable
+        if (isRejected) return false;
+        if (stageIndex === 0) return true;
         const status = stageStatus[stageIndex];
         return status === "completed" || status === "pending";
     };
@@ -159,7 +181,7 @@ export default function RecruitmentPage() {
     };
 
     const handleStageClick = (index) => {
-        if (isStageClickable(index)) {
+        if (isStageClickable(index) && !isRejected) {
             setActiveStage(index);
         }
     };
@@ -192,6 +214,22 @@ export default function RecruitmentPage() {
             }
             setFormData(prev => ({ ...prev, [field]: file }));
             setFormErrors(prev => ({ ...prev, [field]: "" }));
+        }
+    };
+
+    const handleTestFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.type !== "application/pdf") {
+                setTestFileError("File must be PDF format");
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setTestFileError("File must be under 5MB");
+                return;
+            }
+            setTestFile(file);
+            setTestFileError("");
         }
     };
 
@@ -251,7 +289,7 @@ export default function RecruitmentPage() {
         return data.secure_url;
     };
 
-    // 🆕 Get candidate ID based on division
+    // Get candidate ID based on division
     const getNextCandidateId = async (divisionName) => {
         try {
             // Find the division code
@@ -263,22 +301,22 @@ export default function RecruitmentPage() {
             // Reference to the counter document for this division
             const counterRef = doc(db, "applicationsCounter", division.code);
             const counterSnap = await getDoc(counterRef);
-            
+
             let currentCount = 0;
             if (counterSnap.exists()) {
                 currentCount = counterSnap.data().count || 0;
             }
-            
+
             // Increment the count
             const newCount = currentCount + 1;
-            
+
             // Update the counter
             await setDoc(counterRef, { count: newCount });
-            
+
             // Format as DU-001, SB-001, etc.
             const paddedNumber = String(newCount).padStart(3, '0');
             return `${division.code}-${paddedNumber}`;
-            
+
         } catch (error) {
             console.error("Error getting candidate ID:", error);
             throw error;
@@ -298,7 +336,7 @@ export default function RecruitmentPage() {
                 uploadFileToCloudinary(formData.cvFile, 'cv')
             ]);
 
-            // 🆕 Get the candidate ID based on their first choice
+            // Get the candidate ID based on their first choice
             const candidateId = await getNextCandidateId(formData.firstChoice);
 
             // Create application document with Cloudinary URLs and candidate ID
@@ -352,6 +390,53 @@ export default function RecruitmentPage() {
             setSubmitError(error.message || "Gagal mengirim form. Silakan coba lagi.");
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    // For written tests
+    const handleTestSubmit = async () => {
+        if (!testFile) {
+            setTestFileError("Please upload your test file");
+            return;
+        }
+
+        setTestSubmitting(true);
+        try {
+            const testUrl = await uploadFileToCloudinary(testFile, 'test');
+
+            // Update application with test submission - ONLY save the file
+            const appRef = doc(db, "applications", user.uid);
+            await updateDoc(appRef, {
+                testUrl: testUrl,
+                testSubmittedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+                // DO NOT update currentStage or stageStatus here
+            });
+
+            setTestSubmitSuccess(true);
+            setTimeout(() => setTestSubmitSuccess(false), 3000);
+
+            // Refresh data
+            const appSnap = await getDoc(appRef);
+            if (appSnap.exists()) {
+                const appData = appSnap.data();
+                setApplicationData(appData);
+                // Keep current stage and status as they are
+                setCurrentStage(appData.currentStage || 0);
+                setStageStatus(appData.stageStatus || {});
+            }
+
+            // Clear the file input after successful upload
+            setTestFile(null);
+            // Reset file input
+            const fileInput = document.querySelector('input[type="file"][accept=".pdf"]');
+            if (fileInput) fileInput.value = '';
+
+        } catch (error) {
+            console.error("Error submitting test:", error);
+            alert("Failed to submit test. Please try again.");
+        } finally {
+            setTestSubmitting(false);
         }
     };
 
@@ -678,6 +763,267 @@ export default function RecruitmentPage() {
         );
     };
 
+    // Render Written Test
+    const renderWrittenTest = () => {
+        const hasSubmitted = applicationData?.testUrl;
+        const isCompleted = stageStatus[1] === 'completed';
+        const isPending = stageStatus[1] === 'pending';
+
+        return (
+            <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <h4 className="font-semibold text-blue-800 mb-2">📋 Peraturan</h4>
+                    <ul className="text-sm text-gray-700 space-y-2 list-disc list-inside">
+                        <li>Maksimal 3000 kata (termasuk soal)</li>
+                        <li>Font 'Times New Roman', Size 12, Spacing 1.5</li>
+                        <li>DEADLINE ??? 23.59 BJT</li>
+                        <li>Jawab semua pertanyaan langsung di bawah soal yang sudah disediakan</li>
+                        <li>Upload file Anda ke kolom yang sudah disediakan di bawah</li>
+                        <li>Pastikan Anda telah mengganti nama file dengan KODE PESERTA</li>
+                        <li>DILARANG KERAS menggunakan bantuan AI dalam bentuk apapun, apabila terdeteksi adanya indikator penggunaan AI, Anda akan didiskualifikasi secara langsung.</li>
+                    </ul>
+                    <h4 className="font-semibold text-sm text-gray-800 mt-4">Catatan: Silahkan download test file menggunakan tombol di sebelah kanan kolom. All the best!</h4>
+                </div>
+
+                {hasSubmitted ? (
+                    <div className={`rounded-lg p-6 text-center ${isCompleted
+                            ? 'bg-green-50 border border-green-200'
+                            : isPending
+                                ? 'bg-blue-50 border border-blue-200'
+                                : 'bg-gray-50 border border-gray-200'
+                        }`}>
+                        <div className="text-4xl mb-2">
+                            {isCompleted ? '🎉' : isPending ? '✅' : '📝'}
+                        </div>
+                        <p className={`font-semibold ${isCompleted
+                                ? 'text-green-700'
+                                : isPending
+                                    ? 'text-blue-700'
+                                    : 'text-gray-700'
+                            }`}>
+                            {isCompleted
+                                ? 'Congratulations! You have passed the Written Test stage!'
+                                : isPending
+                                    ? 'Your test has been submitted successfully!'
+                                    : 'Test submitted'}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                            {isCompleted
+                                ? 'You may now proceed to the Interview stage. Please check back for your interview schedule.'
+                                : isPending
+                                    ? 'Your submission is being reviewed by the recruitment team.'
+                                    : 'Status: Unknown'}
+                        </p>
+                        {isCompleted && (
+                            <div className="mt-3 p-3 bg-green-100 rounded-lg">
+                                <p className="text-sm text-green-700">
+                                    ✅ Stage completed! The Interview stage will be available once the admin schedules your interview.
+                                </p>
+                            </div>
+                        )}
+                        {isPending && (
+                            <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+                                <p className="text-sm text-blue-700">
+                                    ⏳ Please wait while the recruitment team reviews your submission.
+                                </p>
+                            </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-2">Submitted on: {new Date(applicationData.testSubmittedAt).toLocaleString()}</p>
+                        {applicationData.testUrl && (
+                            <button
+                                onClick={() => window.open(applicationData.testUrl, '_blank')}
+                                className="mt-3 text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                            >
+                                View Your Submission
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="block text-sm font-medium text-gray-500">
+                                    Test Document <span className="text-red-500">*</span>
+                                </label>
+                                <button
+                                    onClick={() => alert("Test document download will be available here")}
+                                    className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1"
+                                >
+                                    📄 Download Test
+                                </button>
+                            </div>
+
+                            <div className={`flex items-center gap-3 p-3 rounded-lg border ${testFileError ? 'border-red-500' : 'border-gray-300'}`}>
+                                <input
+                                    type="file"
+                                    accept=".pdf"
+                                    onChange={handleTestFileChange}
+                                    className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors"
+                                />
+                                {testFile && (
+                                    <span className="text-sm text-green-600">✓ {testFile.name}</span>
+                                )}
+                            </div>
+                            {testFileError && <p className="text-red-500 text-sm mt-1">{testFileError}</p>}
+                            <p className="text-xs text-gray-400 mt-1">Upload your completed test in PDF format (max 5MB)</p>
+                        </div>
+
+                        {testSubmitSuccess && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <p className="text-green-700 text-sm">✅ Test submitted successfully! Your submission is now being reviewed.</p>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleTestSubmit}
+                            disabled={testSubmitting}
+                            className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {testSubmitting ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                                    Submitting...
+                                </span>
+                            ) : (
+                                "Submit Test"
+                            )}
+                        </button>
+                    </>
+                )}
+            </div>
+        );
+    };
+    // Render Interview
+    const renderInterview = () => {
+        // Check if interview details exist in the application data
+        const hasInterviewDetails = applicationData?.interviewTime && applicationData?.interviewPlace;
+
+        // If no interview details are set yet
+        if (!hasInterviewDetails) {
+            return (
+                <div className="text-center py-12">
+                    <div className="text-6xl mb-4">⏳</div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Waiting for Interview Schedule</h3>
+                    <p className="text-gray-500 max-w-md mx-auto">
+                        Your interview time and place are being finalized.
+                        Please check back here for updates.
+                    </p>
+                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-gray-600">
+                            📌 You will receive a notification once your interview schedule is confirmed.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        // Interview details are available
+        return (
+            <div className="space-y-6">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                    <div className="flex items-start gap-3 mb-4">
+                        <span className="text-3xl">🎯</span>
+                        <div>
+                            <h4 className="font-semibold text-purple-800 text-lg">Your Interview Schedule</h4>
+                            <p className="text-sm text-gray-600 mt-1">Please be punctual for your interview session</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3 mt-4">
+                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-100">
+                            <span className="text-xl">🕐</span>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Interview Time</p>
+                                <p className="text-gray-800 font-semibold">{applicationData.interviewTime}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-100">
+                            <span className="text-xl">📍</span>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Interview Place</p>
+                                <p className="text-gray-800 font-semibold">{applicationData.interviewPlace}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <p className="text-sm text-gray-600">
+                        📌 Please prepare a quiet environment with stable internet connection.
+                        You will receive the Zoom link via email 24 hours before your interview.
+                    </p>
+                </div>
+
+                <button
+                    onClick={() => window.location.href = `mailto:recruitment@ppitsz.com`}
+                    className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                >
+                    📧 Need Help? Contact Us
+                </button>
+            </div>
+        );
+    };
+
+    // Render Accepted
+    const renderAccepted = () => {
+        return (
+            <div className="text-center py-8">
+                <div className="text-6xl mb-4">🎉</div>
+                <h3 className="text-2xl font-bold text-green-600 mb-2">Congratulations!</h3>
+                <p className="text-gray-600 text-lg">You have been accepted to join PPIT Shenzhen 2026/2027!</p>
+                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
+                    <p className="text-sm text-gray-700">
+                        Welcome to the team! Further instructions will be sent to your registered email.
+                        We're excited to have you on board! 🚀
+                    </p>
+                </div>
+                {applicationData?.candidateId && (
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg inline-block">
+                        <p className="text-sm text-gray-600">Your Candidate ID:</p>
+                        <p className="text-xl font-bold text-red-600">{applicationData.candidateId}</p>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // Render Rejection
+    const renderRejection = () => {
+        const stageLabel = rejectedStage !== -1 ? stages[rejectedStage].title : "the selection process";
+
+        return (
+            <div className="text-center py-8">
+                <div className="text-6xl mb-4">😔</div>
+                <h3 className="text-2xl font-bold text-red-600 mb-2">We Appreciate Your Interest</h3>
+                <div className="max-w-2xl mx-auto space-y-4">
+                    <p className="text-gray-700 text-lg">
+                        Thank you for your interest in joining PPIT Shenzhen 2026/2027.
+                    </p>
+                    <p className="text-gray-600">
+                        After careful consideration, we regret to inform you that your application
+                        was not selected to proceed further from the <strong>"{stageLabel}"</strong> stage.
+                    </p>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                        <p className="text-gray-700 text-sm">
+                            We received many qualified applications this year, and the selection process
+                            was extremely competitive. We encourage you to continue developing your skills
+                            and hope you'll consider applying again in the future.
+                        </p>
+                    </div>
+                    <div className="mt-6">
+                        <p className="text-gray-500 text-sm">
+                            💪 We wish you all the best in your future endeavors!
+                        </p>
+                        <p className="text-gray-400 text-xs mt-2">
+                            - PPIT Shenzhen Recruitment Team
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     if (loading) {
         return (
             <div style={{ minHeight: "100vh", backgroundColor: "#7E0C0E", fontFamily: "Arial, sans-serif", margin: 0, padding: 0 }}>
@@ -695,6 +1041,9 @@ export default function RecruitmentPage() {
             </div>
         );
     }
+
+    // If rejected, always show rejection view with frozen timeline
+    const showRejection = isRejected;
 
     return (
         <>
@@ -722,7 +1071,7 @@ export default function RecruitmentPage() {
 
                         <div className="mb-8">
                             {/* Glass card wrapper for progress section */}
-                            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/10">
+                            <div className={`bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/10 ${showRejection ? 'opacity-60' : ''}`}>
                                 <h2 className="text-xl md:text-2xl font-montserrat font-semibold text-white mb-6">
                                     My Application Progress:
                                 </h2>
@@ -731,14 +1080,16 @@ export default function RecruitmentPage() {
                                     {/* Progress bar background */}
                                     <div className="absolute left-0 right-0 top-8 h-1 bg-white/20 rounded-full"></div>
 
-                                    {/* Progress bar fill */}
-                                    <div
-                                        className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
-                                        style={{
-                                            width: `${(Object.values(stageStatus).filter(s => s === "completed").length / stages.length) * 100}%`,
-                                            background: 'linear-gradient(to right, #fbbf24, #dc2626)',
-                                        }}
-                                    ></div>
+                                    {/* Progress bar fill - don't show if rejected */}
+                                    {!showRejection && (
+                                        <div
+                                            className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
+                                            style={{
+                                                width: `${(Object.values(stageStatus).filter(s => s === "completed").length / stages.length) * 100}%`,
+                                                background: 'linear-gradient(to right, #fbbf24, #dc2626)',
+                                            }}
+                                        ></div>
+                                    )}
 
                                     {/* Stage buttons */}
                                     <div className="relative flex justify-between items-center">
@@ -752,44 +1103,43 @@ export default function RecruitmentPage() {
                                                 <button
                                                     key={stage.id}
                                                     onClick={() => handleStageClick(index)}
-                                                    disabled={!isClickable}
+                                                    disabled={!isClickable || showRejection}
                                                     className="group flex flex-col items-center relative z-10"
-                                                    title={isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
+                                                    title={showRejection ? "🔒 Application rejected" : isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
                                                 >
                                                     <div className={`
                                 w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center
                                 text-2xl md:text-3xl font-montserrat font-bold
                                 transition-all duration-300 transform 
-                                ${isClickable ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
+                                ${isClickable && !showRejection ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
                                 border-4 shadow-lg
                                 ${isActive
                                                             ? 'border-red-500 shadow-red-500/30 scale-110'
                                                             : isCompleted
                                                                 ? 'border-green-400 shadow-green-400/20'
-                                                                : isLocked
+                                                                : isLocked || showRejection
                                                                     ? 'border-white/20 shadow-none opacity-50'
                                                                     : 'border-amber-400 shadow-amber-400/20'
                                                         }
                                 ${isCompleted
                                                             ? `bg-gradient-to-br ${stage.color} text-white`
-                                                            : isLocked
+                                                            : isLocked || showRejection
                                                                 ? 'bg-white/10 text-white/40'
                                                                 : isActive
                                                                     ? `bg-gradient-to-br ${stage.color} text-white`
                                                                     : 'bg-white/20 backdrop-blur-sm text-white/80'
                                                         }
                             `}>
-                                                        {isCompleted ? '✓' : isLocked ? '🔒' : stage.icon}
+                                                        {isCompleted ? '✓' : isLocked || showRejection ? '🔒' : stage.icon}
                                                     </div>
 
-                                                    {/* Stage Title - COLOR LOGIC FIXED */}
                                                     <span className={`
                                 mt-2 text-xs md:text-sm font-montserrat font-medium text-center max-w-[80px] md:max-w-none
                                 ${isCompleted
                                                             ? 'text-green-300 font-bold'
                                                             : isActive
                                                                 ? 'text-white font-bold drop-shadow-lg'
-                                                                : isLocked
+                                                                : isLocked || showRejection
                                                                     ? 'text-white/40'
                                                                     : 'text-white/80'
                                                         }
@@ -797,19 +1147,18 @@ export default function RecruitmentPage() {
                                                         {stage.title}
                                                     </span>
 
-                                                    {/* Status Text - COLOR LOGIC FIXED */}
                                                     <span className={`
-                                text-xs font-montserrat mt-0.5
-                                ${isCompleted
+    text-xs font-montserrat mt-0.5
+    ${isCompleted
                                                             ? 'text-green-300'
                                                             : isActive
                                                                 ? 'text-amber-300 font-semibold'
-                                                                : isLocked
+                                                                : isLocked || showRejection
                                                                     ? 'text-white/30'
                                                                     : 'text-white/60'
                                                         }
-                            `}>
-                                                        {isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
+`}>
+                                                        {stageStatus[index] === 'rejected' ? '❌ Rejected' : isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
                                                     </span>
                                                 </button>
                                             );
@@ -820,99 +1169,130 @@ export default function RecruitmentPage() {
                         </div>
 
                         <div className="mt-12 md:mt-16 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                            <div className={`h-1.5 bg-gradient-to-r ${stages[activeStage].color}`}></div>
+                            {!showRejection && <div className={`h-1.5 bg-gradient-to-r ${stages[activeStage].color}`}></div>}
+                            {showRejection && <div className="h-1.5 bg-gradient-to-r from-red-500 to-red-700"></div>}
 
                             <div className="p-6 md:p-8 lg:p-10">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <span className="text-3xl">
-                                        {isStageLocked(activeStage) ? '🔒' : isStageCompleted(activeStage) ? '✅' : stages[activeStage].icon}
-                                    </span>
-                                    <div>
-                                        <h3 className="text-xl md:text-2xl font-montserrat font-bold text-gray-800">
-                                            {stages[activeStage].title}
-                                        </h3>
-                                        <p className="text-sm text-gray-500 font-montserrat">
-                                            Step {activeStage + 1} of {stages.length}
-                                            {isStageLocked(activeStage) && (
-                                                <span className="text-red-500 ml-2">🔒 Locked</span>
-                                            )}
-                                            {isStageCompleted(activeStage) && (
-                                                <span className="text-green-500 ml-2">✅ Completed</span>
-                                            )}
-                                            {!isStageLocked(activeStage) && !isStageCompleted(activeStage) && (
-                                                <span className="text-amber-500 ml-2">📋 In Progress</span>
-                                            )}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {isStageLocked(activeStage) ? (
-                                    <div className="text-center py-12 text-gray-400">
-                                        <span className="text-6xl block mb-4">🔒</span>
-                                        <p className="font-montserrat text-lg font-medium text-gray-500">This stage is locked</p>
-                                        <p className="font-montserrat text-sm text-gray-400 mt-1">Complete the previous stages to unlock</p>
-                                    </div>
-                                ) : activeStage === 0 ? (
-                                    renderForm()
+                                {showRejection ? (
+                                    // Rejection View
+                                    <>
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <span className="text-3xl">😔</span>
+                                            <div>
+                                                <h3 className="text-xl md:text-2xl font-montserrat font-bold text-gray-800">
+                                                    Application Status
+                                                </h3>
+                                                <p className="text-sm text-red-500 font-montserrat font-semibold">
+                                                    ❌ Not Selected
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {renderRejection()}
+                                    </>
                                 ) : (
-                                    <div className="text-center py-12 text-gray-400">
-                                        <span className="text-6xl block mb-4">⏳</span>
-                                        <p className="font-montserrat text-lg font-medium text-gray-500">Awaiting Review</p>
-                                        <p className="font-montserrat text-sm text-gray-400 mt-1">Your application is being reviewed. You'll be notified when this stage becomes available.</p>
-                                    </div>
+                                    // Normal Stage View
+                                    <>
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <span className="text-3xl">
+                                                {isStageLocked(activeStage) ? '🔒' : isStageCompleted(activeStage) ? '✅' : stages[activeStage].icon}
+                                            </span>
+                                            <div>
+                                                <h3 className="text-xl md:text-2xl font-montserrat font-bold text-gray-800">
+                                                    {stages[activeStage].title}
+                                                </h3>
+                                                <p className="text-sm text-gray-500 font-montserrat">
+                                                    Step {activeStage + 1} of {stages.length}
+                                                    {isStageLocked(activeStage) && (
+                                                        <span className="text-red-500 ml-2">🔒 Locked</span>
+                                                    )}
+                                                    {isStageCompleted(activeStage) && (
+                                                        <span className="text-green-500 ml-2">✅ Completed</span>
+                                                    )}
+                                                    {!isStageLocked(activeStage) && !isStageCompleted(activeStage) && (
+                                                        <span className="text-amber-500 ml-2">📋 In Progress</span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {isStageLocked(activeStage) ? (
+                                            <div className="text-center py-12 text-gray-400">
+                                                <span className="text-6xl block mb-4">🔒</span>
+                                                <p className="font-montserrat text-lg font-medium text-gray-500">This stage is locked</p>
+                                                <p className="font-montserrat text-sm text-gray-400 mt-1">Complete the previous stages to unlock</p>
+                                            </div>
+                                        ) : activeStage === 0 ? (
+                                            renderForm()
+                                        ) : activeStage === 1 ? (
+                                            renderWrittenTest()
+                                        ) : activeStage === 2 ? (
+                                            renderInterview()
+                                        ) : activeStage === 3 ? (
+                                            renderAccepted()
+                                        ) : (
+                                            <div className="text-center py-12 text-gray-400">
+                                                <span className="text-6xl block mb-4">⏳</span>
+                                                <p className="font-montserrat text-lg font-medium text-gray-500">Awaiting Review</p>
+                                                <p className="font-montserrat text-sm text-gray-400 mt-1">Your application is being reviewed. You'll be notified when this stage becomes available.</p>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
 
-                                <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
-                                    <button
-                                        onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
-                                        disabled={activeStage === 0 || isStageLocked(activeStage - 1)}
-                                        className={`
-                    px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
-                    ${activeStage === 0 || isStageLocked(activeStage - 1)
-                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
-                                            }
-                  `}
-                                    >
-                                        ← Previous
-                                    </button>
+                                {/* Navigation Buttons - hidden when rejected */}
+                                {!showRejection && (
+                                    <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
+                                        <button
+                                            onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
+                                            disabled={activeStage === 0 || isStageLocked(activeStage - 1)}
+                                            className={`
+                                        px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
+                                        ${activeStage === 0 || isStageLocked(activeStage - 1)
+                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
+                                                }
+                                      `}
+                                        >
+                                            ← Previous
+                                        </button>
 
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-sm text-gray-500 font-montserrat">
-                                            {activeStage + 1} / {stages.length}
-                                        </span>
-                                        <div className="flex gap-1">
-                                            {stages.map((_, idx) => {
-                                                const status = stageStatus[idx];
-                                                return (
-                                                    <div
-                                                        key={idx}
-                                                        className={`w-2 h-2 rounded-full transition-all duration-300
-                            ${idx === activeStage ? 'w-6 bg-red-600' :
-                                                                status === 'completed' ? 'bg-green-500' :
-                                                                    status === 'pending' ? 'bg-amber-400' :
-                                                                        'bg-gray-300'}
-                          `}
-                                                    ></div>
-                                                );
-                                            })}
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm text-gray-500 font-montserrat">
+                                                {activeStage + 1} / {stages.length}
+                                            </span>
+                                            <div className="flex gap-1">
+                                                {stages.map((_, idx) => {
+                                                    const status = stageStatus[idx];
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`w-2 h-2 rounded-full transition-all duration-300
+                                                                ${idx === activeStage ? 'w-6 bg-red-600' :
+                                                                    status === 'completed' ? 'bg-green-500' :
+                                                                        status === 'pending' ? 'bg-amber-400' :
+                                                                            'bg-gray-300'}
+                                                            `}
+                                                        ></div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <button
-                                        onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
-                                        disabled={activeStage === stages.length - 1 || isStageLocked(activeStage + 1)}
-                                        className={`
-                    px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
-                    ${activeStage === stages.length - 1 || isStageLocked(activeStage + 1)
-                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                : 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:shadow-red-300/50 hover:scale-105'
-                                            }
-                  `}
-                                    >
-                                        Next →
-                                    </button>
-                                </div>
+                                        <button
+                                            onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
+                                            disabled={activeStage === stages.length - 1 || isStageLocked(activeStage + 1)}
+                                            className={`
+                                        px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
+                                        ${activeStage === stages.length - 1 || isStageLocked(activeStage + 1)
+                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:shadow-red-300/50 hover:scale-105'
+                                                }
+                                      `}
+                                        >
+                                            Next →
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

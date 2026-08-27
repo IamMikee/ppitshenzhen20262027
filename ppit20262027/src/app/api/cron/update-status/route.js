@@ -1,4 +1,3 @@
-// src/app/api/cron/update-statuses/route.js
 import { NextResponse } from 'next/server';
 import { updateUserStatus } from '../../../../services/forms';
 
