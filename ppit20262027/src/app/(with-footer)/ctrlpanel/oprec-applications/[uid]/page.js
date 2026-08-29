@@ -17,6 +17,12 @@ export default function ApplicationDetail() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [updating, setUpdating] = useState(false);
 
+  // Interview time picker state
+  const [interviewDate, setInterviewDate] = useState("");
+  const [interviewTime, setInterviewTime] = useState("");
+  const [interviewLocation, setInterviewLocation] = useState("");
+  const [savingInterview, setSavingInterview] = useState(false);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
@@ -41,7 +47,18 @@ export default function ApplicationDetail() {
       const appRef = doc(db, "applications", uid);
       const appSnap = await getDoc(appRef);
       if (appSnap.exists()) {
-        setApplication({ id: appSnap.id, ...appSnap.data() });
+        const data = { id: appSnap.id, ...appSnap.data() };
+        setApplication(data);
+
+        // Pre-fill interview fields if they exist
+        if (data.interviewDateTime) {
+          const dateObj = new Date(data.interviewDateTime);
+          setInterviewDate(dateObj.toISOString().split('T')[0]);
+          setInterviewTime(dateObj.toTimeString().slice(0, 5));
+        }
+        if (data.interviewLocation) {
+          setInterviewLocation(data.interviewLocation);
+        }
       } else {
         setApplication(null);
       }
@@ -49,6 +66,33 @@ export default function ApplicationDetail() {
     } catch (error) {
       console.error("Error fetching application:", error);
       setLoading(false);
+    }
+  };
+
+  const saveInterviewSchedule = async () => {
+    if (!interviewDate || !interviewTime || !interviewLocation) {
+      alert("Please fill in all fields: Date, Time, and Location");
+      return;
+    }
+
+    setSavingInterview(true);
+    try {
+      const appRef = doc(db, "applications", uid);
+      const dateTime = new Date(`${interviewDate}T${interviewTime}:00`);
+
+      await updateDoc(appRef, {
+        interviewDateTime: dateTime.toISOString(),
+        interviewLocation: interviewLocation,
+        updatedAt: new Date().toISOString()
+      });
+
+      await fetchApplication();
+      alert("✅ Interview schedule saved successfully!");
+    } catch (error) {
+      console.error("Error saving interview schedule:", error);
+      alert("Failed to save interview schedule. Please try again.");
+    } finally {
+      setSavingInterview(false);
     }
   };
 
@@ -284,6 +328,19 @@ export default function ApplicationDetail() {
   }
 
   const isRejected = application.currentStage === 4;
+  const currentStage = application.currentStage;
+
+  // Determine visibility based on current stage
+  // Stage 0: Show everything except interview picker
+  // Stage 1: Only show test answers and interview picker
+  // Stage 2 & 3: Show everything including interview picker
+  const showPersonalInfo = currentStage === 1 ? false : !application?.testUrl;
+  const showEducation = showPersonalInfo;
+  const showApplicationDetails = showPersonalInfo;
+  const showDocuments = showPersonalInfo;
+  const showTestAnswers = true;
+  const showInterviewPicker = currentStage === 1 || currentStage === 2 || currentStage === 3;
+
   // Find which stage was rejected
   let rejectedStageIndex = -1;
   if (isRejected) {
@@ -315,6 +372,7 @@ export default function ApplicationDetail() {
                   Application Details
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
+                  <span className="font-medium text-gray-700">{application.name}</span> •
                   Submitted on {new Date(application.submittedAt).toLocaleDateString('id-ID', {
                     day: 'numeric',
                     month: 'long',
@@ -333,170 +391,255 @@ export default function ApplicationDetail() {
           </div>
         </div>
 
-        {/* Personal Information */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gray-50 border-b">
-            <h2 className="text-lg font-semibold font-montserrat text-gray-800">
-              👤 Personal Information
-            </h2>
-          </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Full Name</p>
-              <p className="text-gray-900 font-medium">{application.name}</p>
+        {/* Personal Information - Stage 0, 2, 3 */}
+        {showPersonalInfo && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                👤 Personal Information
+              </h2>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Email</p>
-              <p className="text-gray-900">{application.email}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Phone (WA)</p>
-              <p className="text-gray-900">{application.phone}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Birth Date</p>
-              <p className="text-gray-900">{new Date(application.birthDate).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-              })}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Education */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gray-50 border-b">
-            <h2 className="text-lg font-semibold font-montserrat text-gray-800">
-              🎓 Education
-            </h2>
-          </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">University</p>
-              <p className="text-gray-900">{application.university}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Student ID</p>
-              <p className="text-gray-900">{application.studentId}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Graduation Year</p>
-              <p className="text-gray-900">{application.graduationYear}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Application Details */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gray-50 border-b">
-            <h2 className="text-lg font-semibold font-montserrat text-gray-800">
-              📋 Application Details
-            </h2>
-          </div>
-          <div className="p-6 space-y-4">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Motivation</p>
-              <div className="mt-1 p-4 bg-gray-50 text-gray-700 rounded-lg whitespace-pre-wrap">
-                {application.motivation}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500 font-medium">1st Choice</p>
-                <p className="text-gray-900 font-medium">{application.firstChoice}</p>
+                <p className="text-sm text-gray-500 font-medium">Full Name</p>
+                <p className="text-gray-900 font-medium">{application.name}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 font-medium">2nd Choice</p>
-                <p className="text-gray-900 font-medium">{application.secondChoice}</p>
+                <p className="text-sm text-gray-500 font-medium">Email</p>
+                <p className="text-gray-900">{application.email}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Phone (WA)</p>
+                <p className="text-gray-900">{application.phone}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Birth Date</p>
+                <p className="text-gray-900">{new Date(application.birthDate).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}</p>
               </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Available for Other Positions</p>
-              <p className="text-gray-900">{application.otherPosition ? "✅ Ya" : "❌ Tidak"}</p>
-            </div>
           </div>
-        </div>
+        )}
 
-        {/* Documents */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gray-50 border-b">
-            <h2 className="text-lg font-semibold font-montserrat text-gray-800">
-              📄 Documents
-            </h2>
-          </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Surat Pernyataan</p>
-              {application.statementUrl ? (
-                <a
-                  href={application.statementUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-red-600 hover:text-red-800 font-medium mt-1"
-                >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                    <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
-                    <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
-                  </svg>
-                  View PDF
-                </a>
-              ) : (
-                <p className="text-gray-400 mt-1">Not uploaded</p>
-              )}
+        {/* Education - Stage 0, 2, 3 */}
+        {showEducation && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                🎓 Education
+              </h2>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">CV</p>
-              {application.cvUrl ? (
-                <a
-                  href={application.cvUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-red-600 hover:text-red-800 font-medium mt-1"
-                >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                    <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
-                    <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
-                  </svg>
-                  View PDF
-                </a>
-              ) : (
-                <p className="text-gray-400 mt-1">Not uploaded</p>
-              )}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">University</p>
+                <p className="text-gray-900">{application.university}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Student ID</p>
+                <p className="text-gray-900">{application.studentId}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Graduation Year</p>
+                <p className="text-gray-900">{application.graduationYear}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Test Answers */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gray-50 border-b">
-            <h2 className="text-lg font-semibold font-montserrat text-gray-800">
-              📝 Test Answers
-            </h2>
+        {/* Application Details - Stage 0, 2, 3 */}
+        {showApplicationDetails && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                📋 Application Details
+              </h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Motivation</p>
+                <div className="mt-1 p-4 bg-gray-50 text-gray-700 rounded-lg whitespace-pre-wrap">
+                  {application.motivation}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">1st Choice</p>
+                  <p className="text-gray-900 font-medium">{application.firstChoice}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">2nd Choice</p>
+                  <p className="text-gray-900 font-medium">{application.secondChoice}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Available for Other Positions</p>
+                <p className="text-gray-900">{application.otherPosition ? "✅ Ya" : "❌ Tidak"}</p>
+              </div>
+            </div>
           </div>
-          <div className="p-6 grid grid-cols-1 gap-4">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Test Submission</p>
-              {application.testUrl ? (
-                <div className="mt-2 space-y-2">
+        )}
+
+        {/* Documents - Stage 0, 2, 3 */}
+        {showDocuments && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                📄 Documents
+              </h2>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Surat Pernyataan</p>
+                {application.statementUrl ? (
                   <a
-                    href={application.testUrl}
+                    href={application.statementUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                    className="inline-flex items-center gap-2 text-red-600 hover:text-red-800 font-medium mt-1"
                   >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
                       <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
                       <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
                     </svg>
-                    View Test Answers
+                    View PDF
                   </a>
-                  {application.testSubmittedAt && (
-                    <p className="text-xs text-gray-400">
-                      Submitted on: {new Date(application.testSubmittedAt).toLocaleString('id-ID', {
+                ) : (
+                  <p className="text-gray-400 mt-1">Not uploaded</p>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">CV</p>
+                {application.cvUrl ? (
+                  <a
+                    href={application.cvUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-red-600 hover:text-red-800 font-medium mt-1"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                      <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
+                      <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
+                    </svg>
+                    View PDF
+                  </a>
+                ) : (
+                  <p className="text-gray-400 mt-1">Not uploaded</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Test Answers - Stage 1, 2, 3 */}
+        {showTestAnswers && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                📝 Test Answers
+              </h2>
+            </div>
+            <div className="p-6 grid grid-cols-1 gap-4">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Test Submission</p>
+                {application.testUrl ? (
+                  <div className="mt-2 space-y-2">
+                    <a
+                      href={application.testUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                        <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
+                        <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
+                      </svg>
+                      View Test Answers
+                    </a>
+                    {application.testSubmittedAt && (
+                      <p className="text-xs text-gray-400">
+                        Submitted on: {new Date(application.testSubmittedAt).toLocaleString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 mt-1">Not submitted yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Interview Time Picker - Stage 1, 2, 3 */}
+        {showInterviewPicker && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div className="px-6 py-4 bg-gray-50 border-b">
+              <h2 className="text-lg font-semibold font-montserrat text-gray-800">
+                🗓️ Interview Schedule
+              </h2>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-600">Applicant's University:</p>
+                  <p className="text-sm font-semibold text-gray-800">{application.university || "Not provided"}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Interview Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={interviewDate}
+                    onChange={(e) => setInterviewDate(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Interview Time <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={interviewTime}
+                    onChange={(e) => setInterviewTime(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Interview Location <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={interviewLocation}
+                    onChange={(e) => setInterviewLocation(e.target.value)}
+                    placeholder="e.g., CUHK-Shenzhen Conference Complex I Room 701"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                {application.interviewDateTime && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-xs text-gray-600">Currently saved:</p>
+                    <p className="text-sm font-medium text-gray-800">
+                      {new Date(application.interviewDateTime).toLocaleString('id-ID', {
+                        weekday: 'long',
                         day: 'numeric',
                         month: 'long',
                         year: 'numeric',
@@ -504,16 +647,30 @@ export default function ApplicationDetail() {
                         minute: '2-digit'
                       })}
                     </p>
+                    <p className="text-sm text-gray-700">{application.interviewLocation}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={saveInterviewSchedule}
+                  disabled={savingInterview}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingInterview ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                      Saving...
+                    </span>
+                  ) : (
+                    "Save Interview Schedule"
                   )}
-                </div>
-              ) : (
-                <p className="text-gray-400 mt-1">Not submitted yet</p>
-              )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Progress Status & Actions */}
+        {/* Progress Status & Actions - Always visible */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
           <div className="px-6 py-4 bg-gray-50 border-b">
             <h2 className="text-lg font-semibold font-montserrat text-gray-800">

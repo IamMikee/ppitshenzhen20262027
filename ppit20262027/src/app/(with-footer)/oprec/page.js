@@ -289,6 +289,28 @@ export default function RecruitmentPage() {
         return data.secure_url;
     };
 
+    const downloadTestDocument = () => {
+        const cloudinaryUrl = 'https://res.cloudinary.com/dfcheu2em/raw/upload/v1788020245/TEMPLATE_TES_TERTULIS_26_27.docx';
+
+        // Fetch the file and download with custom filename
+        fetch(cloudinaryUrl)
+            .then(response => response.blob())
+            .then(blob => {
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `${applicationData?.candidateId || 'applicant'}.docx`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            })
+            .catch(error => {
+                console.error('Error downloading file:', error);
+                alert('Failed to download test document. Please try again.');
+            });
+    };
+
     // Get candidate ID based on division
     const getNextCandidateId = async (divisionName) => {
         try {
@@ -787,19 +809,19 @@ export default function RecruitmentPage() {
 
                 {hasSubmitted ? (
                     <div className={`rounded-lg p-6 text-center ${isCompleted
-                            ? 'bg-green-50 border border-green-200'
-                            : isPending
-                                ? 'bg-blue-50 border border-blue-200'
-                                : 'bg-gray-50 border border-gray-200'
+                        ? 'bg-green-50 border border-green-200'
+                        : isPending
+                            ? 'bg-blue-50 border border-blue-200'
+                            : 'bg-gray-50 border border-gray-200'
                         }`}>
                         <div className="text-4xl mb-2">
                             {isCompleted ? '🎉' : isPending ? '✅' : '📝'}
                         </div>
                         <p className={`font-semibold ${isCompleted
-                                ? 'text-green-700'
-                                : isPending
-                                    ? 'text-blue-700'
-                                    : 'text-gray-700'
+                            ? 'text-green-700'
+                            : isPending
+                                ? 'text-blue-700'
+                                : 'text-gray-700'
                             }`}>
                             {isCompleted
                                 ? 'Congratulations! You have passed the Written Test stage!'
@@ -846,7 +868,7 @@ export default function RecruitmentPage() {
                                     Test Document <span className="text-red-500">*</span>
                                 </label>
                                 <button
-                                    onClick={() => alert("Test document download will be available here")}
+                                    onClick={downloadTestDocument}
                                     className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1"
                                 >
                                     📄 Download Test
@@ -893,10 +915,48 @@ export default function RecruitmentPage() {
             </div>
         );
     };
+
     // Render Interview
     const renderInterview = () => {
         // Check if interview details exist in the application data
-        const hasInterviewDetails = applicationData?.interviewTime && applicationData?.interviewPlace;
+        const hasInterviewDetails = applicationData?.interviewDateTime && applicationData?.interviewLocation;
+
+        // If interview is completed (stage 2 and 3), show interview completed view
+        if (currentStage >= 2) {
+            return (
+                <div className="text-center py-12">
+                    <div className="text-6xl mb-4">✅</div>
+                    <h3 className="text-xl font-semibold text-green-600 mb-2">Interview Completed!</h3>
+                    <p className="text-gray-600 max-w-md mx-auto">
+                        You have successfully completed your interview.
+                    </p>
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-gray-700">
+                            🎯 We are reviewing all candidates.
+                            You will be notified once the final decision has been made.
+                        </p>
+                    </div>
+                    {applicationData.interviewDateTime && (
+                        <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg max-w-md mx-auto">
+                            <p className="text-xs text-gray-500">Interview Date:</p>
+                            <p className="text-sm font-medium text-gray-700">
+                                {new Date(applicationData.interviewDateTime).toLocaleString('id-ID', {
+                                    weekday: 'long',
+                                    day: 'numeric',
+                                    month: 'long',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}
+                            </p>
+                        </div>
+                    )}
+                    <div className="mt-4 text-sm text-gray-500">
+                        ⏳ Please check Stage 3 for the final results.
+                    </div>
+                </div>
+            );
+        }
 
         // If no interview details are set yet
         if (!hasInterviewDetails) {
@@ -917,7 +977,7 @@ export default function RecruitmentPage() {
             );
         }
 
-        // Interview details are available
+        // Interview details are available (still pending)
         return (
             <div className="space-y-6">
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
@@ -934,15 +994,24 @@ export default function RecruitmentPage() {
                             <span className="text-xl">🕐</span>
                             <div>
                                 <p className="text-xs text-gray-500 font-medium">Interview Time</p>
-                                <p className="text-gray-800 font-semibold">{applicationData.interviewTime}</p>
+                                <p className="text-gray-800 font-semibold">
+                                    {new Date(applicationData.interviewDateTime).toLocaleString('id-ID', {
+                                        weekday: 'long',
+                                        day: 'numeric',
+                                        month: 'long',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </p>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-100">
                             <span className="text-xl">📍</span>
                             <div>
-                                <p className="text-xs text-gray-500 font-medium">Interview Place</p>
-                                <p className="text-gray-800 font-semibold">{applicationData.interviewPlace}</p>
+                                <p className="text-xs text-gray-500 font-medium">Interview Location</p>
+                                <p className="text-gray-800 font-semibold">{applicationData.interviewLocation}</p>
                             </div>
                         </div>
                     </div>
@@ -967,6 +1036,26 @@ export default function RecruitmentPage() {
 
     // Render Accepted
     const renderAccepted = () => {
+        // If not yet accepted (interview done, waiting for decision)
+        if (currentStage === 2) {
+            return (
+                <div className="text-center py-12">
+                    <div className="text-6xl mb-4">⏳</div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Interview Under Review</h3>
+                    <p className="text-gray-500 max-w-md mx-auto">
+                        Thank you for completing your interview. We are currently reviewing your performance.
+                    </p>
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-gray-600">
+                            📌 You will be notified once the final decision has been made.
+                            Please check back for updates.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        // Accepted (Stage 3)
         return (
             <div className="text-center py-8">
                 <div className="text-6xl mb-4">🎉</div>
@@ -1148,8 +1237,8 @@ export default function RecruitmentPage() {
                                                     </span>
 
                                                     <span className={`
-    text-xs font-montserrat mt-0.5
-    ${isCompleted
+                                    text-xs font-montserrat mt-0.5
+                                    ${isCompleted
                                                             ? 'text-green-300'
                                                             : isActive
                                                                 ? 'text-amber-300 font-semibold'
@@ -1157,7 +1246,7 @@ export default function RecruitmentPage() {
                                                                     ? 'text-white/30'
                                                                     : 'text-white/60'
                                                         }
-`}>
+                                `}>
                                                         {stageStatus[index] === 'rejected' ? '❌ Rejected' : isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
                                                     </span>
                                                 </button>
