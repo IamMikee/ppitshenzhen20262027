@@ -790,9 +790,7 @@ export default function RecruitmentPage() {
         const hasSubmitted = applicationData?.testUrl;
         const isCompleted = stageStatus[1] === 'completed';
         const isPending = stageStatus[1] === 'pending';
-
-        // Toggle this to true/false to show/hide the written test
-        const isTestReleased = true; // Set to false to show "Test not released yet" message
+        const isTestReleased = false;
 
         // If test is not released yet, show waiting message
         if (!isTestReleased) {
