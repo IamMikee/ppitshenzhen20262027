@@ -791,6 +791,27 @@ export default function RecruitmentPage() {
         const isCompleted = stageStatus[1] === 'completed';
         const isPending = stageStatus[1] === 'pending';
 
+        // Toggle this to true/false to show/hide the written test
+        const isTestReleased = true; // Set to false to show "Test not released yet" message
+
+        // If test is not released yet, show waiting message
+        if (!isTestReleased) {
+            return (
+                <div className="text-center py-12">
+                    <div className="text-6xl mb-4">⏳</div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Waiting for Test Release</h3>
+                    <p className="text-gray-500 max-w-md mx-auto">
+                        The written test has not been released yet. Please check back later for updates.
+                    </p>
+                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-gray-600">
+                            📌 You will be notified once the test is available.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
