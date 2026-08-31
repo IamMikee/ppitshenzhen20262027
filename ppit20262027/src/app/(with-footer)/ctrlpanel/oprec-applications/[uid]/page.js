@@ -23,6 +23,16 @@ export default function ApplicationDetail() {
   const [interviewLocation, setInterviewLocation] = useState("");
   const [savingInterview, setSavingInterview] = useState(false);
 
+  // ─── MANUAL TOGGLES ───────────────────────────────────────────
+  // Set these to true/false to control what shows in the admin detail view
+  const showPersonalInfo = true;        // Show Personal Information section
+  const showEducation = true;           // Show Education section
+  const showApplicationDetails = true;  // Show Application Details section
+  const showDocuments = true;           // Show Documents section
+  const showTestAnswers = false;         // Show Test Answers section
+  const showInterviewPicker = false;     // Show Interview Schedule picker
+  // ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
@@ -328,18 +338,6 @@ export default function ApplicationDetail() {
   }
 
   const isRejected = application.currentStage === 4;
-  const currentStage = application.currentStage;
-
-  // Determine visibility based on current stage
-  // Stage 0: Show everything except interview picker
-  // Stage 1: Only show test answers and interview picker
-  // Stage 2 & 3: Show everything including interview picker
-  const showPersonalInfo = currentStage === 1 ? false : !application?.testUrl;
-  const showEducation = showPersonalInfo;
-  const showApplicationDetails = showPersonalInfo;
-  const showDocuments = showPersonalInfo;
-  const showTestAnswers = true;
-  const showInterviewPicker = currentStage === 1 || currentStage === 2 || currentStage === 3;
 
   // Find which stage was rejected
   let rejectedStageIndex = -1;
@@ -391,7 +389,7 @@ export default function ApplicationDetail() {
           </div>
         </div>
 
-        {/* Personal Information - Stage 0, 2, 3 */}
+        {/* Personal Information - Toggle ON/OFF */}
         {showPersonalInfo && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -424,7 +422,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Education - Stage 0, 2, 3 */}
+        {/* Education - Toggle ON/OFF */}
         {showEducation && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -449,7 +447,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Application Details - Stage 0, 2, 3 */}
+        {/* Application Details - Toggle ON/OFF */}
         {showApplicationDetails && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -482,7 +480,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Documents - Stage 0, 2, 3 */}
+        {/* Documents - Toggle ON/OFF */}
         {showDocuments && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -535,7 +533,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Test Answers - Stage 1, 2, 3 */}
+        {/* Test Answers - Toggle ON/OFF */}
         {showTestAnswers && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -581,7 +579,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Interview Time Picker - Stage 1, 2, 3 */}
+        {/* Interview Time Picker - Toggle ON/OFF */}
         {showInterviewPicker && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
