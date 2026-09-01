@@ -17,7 +17,6 @@ export default function RecruitmentPage() {
     const [loading, setLoading] = useState(true);
     const [applicationData, setApplicationData] = useState(null);
     const [currentStage, setCurrentStage] = useState(0);
-    const [stageStatus, setStageStatus] = useState({});
     const [formSubmitted, setFormSubmitted] = useState(false);
     const [isRejected, setIsRejected] = useState(false);
     const [rejectedStage, setRejectedStage] = useState(-1);
@@ -112,39 +111,27 @@ export default function RecruitmentPage() {
                         }));
                     }
 
-                    // Check if application already exists (meaning form was submitted)
+                    // Check if application already exists
                     const appRef = doc(db, "applications", u.uid);
                     const appSnap = await getDoc(appRef);
 
                     if (appSnap.exists()) {
                         const appData = appSnap.data();
                         setApplicationData(appData);
-                        setCurrentStage(appData.currentStage || 0);
-                        setStageStatus(appData.stageStatus || {});
-                        setActiveStage(appData.currentStage || 0);
+                        const stage = appData.currentStage || 0;
+                        setCurrentStage(stage);
+                        setActiveStage(stage > 3 ? 0 : stage);
                         setFormSubmitted(true);
 
-                        // Check if rejected
-                        const statusValues = Object.values(appData.stageStatus || {});
-                        if (statusValues.includes('rejected')) {
+                        // Check if rejected (currentStage === 4)
+                        if (stage === 4) {
                             setIsRejected(true);
-                            // Find which stage was rejected
-                            for (let i = 0; i < 4; i++) {
-                                if (appData.stageStatus?.[i] === 'rejected') {
-                                    setRejectedStage(i);
-                                    break;
-                                }
-                            }
+                            setRejectedStage(appData.rejectedAtStage || 0);
+                        } else {
+                            setIsRejected(false);
                         }
                     } else {
                         // No application yet - set initial state
-                        const initialStatus = {
-                            0: "pending",
-                            1: "locked",
-                            2: "locked",
-                            3: "locked"
-                        };
-                        setStageStatus(initialStatus);
                         setCurrentStage(0);
                         setActiveStage(0);
                         setFormSubmitted(false);
@@ -164,20 +151,36 @@ export default function RecruitmentPage() {
         return () => unsub();
     }, []);
 
-    // Check if a stage is clickable (completed or pending)
+    // ─── STAGE HELPER FUNCTIONS ──────────────────────────────
+    // currentStage meanings:
+    // 0 = Stage 0 completed, waiting for Stage 1 (Written Test)
+    // 1 = Stage 1 completed, waiting for Stage 2 (Interview)
+    // 2 = Stage 2 completed, waiting for Stage 3 (Acceptance)
+    // 3 = Stage 3 completed ✅ Accepted
+    // 4 = Rejected ❌ (hide timeline)
+
     const isStageClickable = (stageIndex) => {
         if (isRejected) return false;
-        if (stageIndex === 0) return true;
-        const status = stageStatus[stageIndex];
-        return status === "completed" || status === "pending";
+        // Can click on completed stages (0 to currentStage) and the pending stage (currentStage + 1)
+        return stageIndex <= currentStage + 1;
     };
 
     const isStageCompleted = (stageIndex) => {
-        return stageStatus[stageIndex] === "completed";
+        if (isRejected) return false;
+        // Completed if index is less than or equal to currentStage
+        return stageIndex <= currentStage;
     };
 
     const isStageLocked = (stageIndex) => {
-        return stageStatus[stageIndex] === "locked";
+        if (isRejected) return true;
+        // Locked if index is greater than currentStage + 1 (beyond the pending stage)
+        return stageIndex > currentStage + 1;
+    };
+
+    const isStagePending = (stageIndex) => {
+        if (isRejected) return false;
+        // Pending if index is exactly currentStage + 1
+        return stageIndex === currentStage + 1;
     };
 
     const handleStageClick = (index) => {
@@ -193,7 +196,6 @@ export default function RecruitmentPage() {
             ...prev,
             [name]: type === 'checkbox' ? checked : value
         }));
-        // Clear error for this field
         if (formErrors[name]) {
             setFormErrors(prev => ({ ...prev, [name]: "" }));
         }
@@ -202,12 +204,10 @@ export default function RecruitmentPage() {
     const handleFileChange = (e, field) => {
         const file = e.target.files[0];
         if (file) {
-            // Validate PDF
             if (file.type !== "application/pdf") {
                 setFormErrors(prev => ({ ...prev, [field]: "File must be PDF format" }));
                 return;
             }
-            // Validate size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
                 setFormErrors(prev => ({ ...prev, [field]: "File must be under 5MB" }));
                 return;
@@ -261,7 +261,6 @@ export default function RecruitmentPage() {
         return Object.keys(errors).length === 0;
     };
 
-    // In your RecruitmentPage component
     const uploadFileToCloudinary = async (file, fileType) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -292,7 +291,6 @@ export default function RecruitmentPage() {
     const downloadTestDocument = () => {
         const cloudinaryUrl = 'https://res.cloudinary.com/dfcheu2em/raw/upload/v1788020245/TEMPLATE_TES_TERTULIS_26_27.docx';
 
-        // Fetch the file and download with custom filename
         fetch(cloudinaryUrl)
             .then(response => response.blob())
             .then(blob => {
@@ -311,16 +309,13 @@ export default function RecruitmentPage() {
             });
     };
 
-    // Get candidate ID based on division
     const getNextCandidateId = async (divisionName) => {
         try {
-            // Find the division code
             const division = divisions.find(d => d.name === divisionName);
             if (!division) {
                 throw new Error(`Invalid division: ${divisionName}`);
             }
 
-            // Reference to the counter document for this division
             const counterRef = doc(db, "applicationsCounter", division.code);
             const counterSnap = await getDoc(counterRef);
 
@@ -329,13 +324,9 @@ export default function RecruitmentPage() {
                 currentCount = counterSnap.data().count || 0;
             }
 
-            // Increment the count
             const newCount = currentCount + 1;
-
-            // Update the counter
             await setDoc(counterRef, { count: newCount });
 
-            // Format as DU-001, SB-001, etc.
             const paddedNumber = String(newCount).padStart(3, '0');
             return `${division.code}-${paddedNumber}`;
 
@@ -352,20 +343,17 @@ export default function RecruitmentPage() {
         setSubmitError("");
 
         try {
-            // Upload files to Cloudinary - returns public URLs
             const [statementUrl, cvUrl] = await Promise.all([
                 uploadFileToCloudinary(formData.statementFile, 'statement'),
                 uploadFileToCloudinary(formData.cvFile, 'cv')
             ]);
 
-            // Get the candidate ID based on their first choice
             const candidateId = await getNextCandidateId(formData.firstChoice);
 
-            // Create application document with Cloudinary URLs and candidate ID
             const applicationData = {
                 uid: user.uid,
                 candidateId: candidateId,
-                division: formData.firstChoice, // Store which division they applied to
+                division: formData.firstChoice,
                 email: formData.email,
                 name: formData.fullName,
                 phone: formData.phone,
@@ -380,26 +368,18 @@ export default function RecruitmentPage() {
                 statementUrl: statementUrl,
                 cvUrl: cvUrl,
                 currentStage: 0,
-                stageStatus: {
-                    0: "completed",
-                    1: "pending",
-                    2: "locked",
-                    3: "locked"
-                },
                 submittedAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
             await setDoc(doc(db, "applications", user.uid), applicationData);
 
-            // Update user's submittedForms
             await updateDoc(doc(db, "users", user.uid), {
                 submittedForms: arrayUnion("recruitment_2026")
             });
 
             setApplicationData(applicationData);
             setCurrentStage(0);
-            setStageStatus(applicationData.stageStatus);
             setFormSubmitted(true);
             setSubmitSuccess(true);
 
@@ -415,7 +395,6 @@ export default function RecruitmentPage() {
         }
     };
 
-    // For written tests
     const handleTestSubmit = async () => {
         if (!testFile) {
             setTestFileError("Please upload your test file");
@@ -426,31 +405,24 @@ export default function RecruitmentPage() {
         try {
             const testUrl = await uploadFileToCloudinary(testFile, 'test');
 
-            // Update application with test submission - ONLY save the file
             const appRef = doc(db, "applications", user.uid);
             await updateDoc(appRef, {
                 testUrl: testUrl,
                 testSubmittedAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-                // DO NOT update currentStage or stageStatus here
             });
 
             setTestSubmitSuccess(true);
             setTimeout(() => setTestSubmitSuccess(false), 3000);
 
-            // Refresh data
             const appSnap = await getDoc(appRef);
             if (appSnap.exists()) {
                 const appData = appSnap.data();
                 setApplicationData(appData);
-                // Keep current stage and status as they are
                 setCurrentStage(appData.currentStage || 0);
-                setStageStatus(appData.stageStatus || {});
             }
 
-            // Clear the file input after successful upload
             setTestFile(null);
-            // Reset file input
             const fileInput = document.querySelector('input[type="file"][accept=".pdf"]');
             if (fileInput) fileInput.value = '';
 
@@ -462,14 +434,15 @@ export default function RecruitmentPage() {
         }
     };
 
-    // Render form
+    // ─── RENDER FUNCTIONS ──────────────────────────────────────
+
     const renderForm = () => {
         if (formSubmitted) {
             return (
                 <div className="text-center py-8">
                     <div className="text-6xl mb-4">✅</div>
                     <h3 className="text-2xl font-bold text-green-600 mb-2">Form Submitted Successfully!</h3>
-                    <p className="text-gray-500">Your application has been received. You can now proceed to the next stages.</p>
+                    <p className="text-gray-500">Your application has been received.</p>
                     {applicationData?.candidateId && (
                         <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg inline-block">
                             <p className="text-sm text-gray-600">Your Candidate ID:</p>
@@ -483,7 +456,6 @@ export default function RecruitmentPage() {
 
         return (
             <div className="space-y-6">
-                {/* Warning */}
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
                     <p className="text-red-700 text-sm font-medium">
                         ⚠️ Peringatan: Progress tidak akan disimpan sampai Anda menekan tombol "Submit".
@@ -491,7 +463,6 @@ export default function RecruitmentPage() {
                     </p>
                 </div>
 
-                {/* Full Name */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Nama lengkap sesuai paspor <span className="text-red-500">*</span>
@@ -507,7 +478,6 @@ export default function RecruitmentPage() {
                     {formErrors.fullName && <p className="text-red-500 text-sm mt-1">{formErrors.fullName}</p>}
                 </div>
 
-                {/* Phone */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Nomor WA <span className="text-red-500">*</span>
@@ -523,7 +493,6 @@ export default function RecruitmentPage() {
                     {formErrors.phone && <p className="text-red-500 text-sm mt-1">{formErrors.phone}</p>}
                 </div>
 
-                {/* Email (fixed) */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Email aktif <span className="text-red-500">*</span>
@@ -538,7 +507,6 @@ export default function RecruitmentPage() {
                     <p className="text-xs text-gray-500 mt-1">Email tidak dapat diubah</p>
                 </div>
 
-                {/* Birth Date */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Tanggal lahir <span className="text-red-500">*</span>
@@ -552,7 +520,6 @@ export default function RecruitmentPage() {
                     />
                 </div>
 
-                {/* University */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Universitas <span className="text-red-500">*</span>
@@ -568,7 +535,6 @@ export default function RecruitmentPage() {
                     {formErrors.university && <p className="text-red-500 text-sm mt-1">{formErrors.university}</p>}
                 </div>
 
-                {/* Student ID */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Student ID <span className="text-red-500">*</span>
@@ -584,7 +550,6 @@ export default function RecruitmentPage() {
                     {formErrors.studentId && <p className="text-red-500 text-sm mt-1">{formErrors.studentId}</p>}
                 </div>
 
-                {/* Graduation Year */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Tahun kelulusan <span className="text-red-500">*</span>
@@ -602,7 +567,6 @@ export default function RecruitmentPage() {
                     {formErrors.graduationYear && <p className="text-red-500 text-sm mt-1">{formErrors.graduationYear}</p>}
                 </div>
 
-                {/* Motivation Essay */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Kenapa Anda ingin mendaftar sebagai pengurus PPITSZ 26/27? <span className="text-red-500">*</span>
@@ -618,7 +582,6 @@ export default function RecruitmentPage() {
                     {formErrors.motivation && <p className="text-red-500 text-sm mt-1">{formErrors.motivation}</p>}
                 </div>
 
-                {/* First Choice */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Bidang yang Anda minati (1st Choice) <span className="text-red-500">*</span>
@@ -637,7 +600,6 @@ export default function RecruitmentPage() {
                     {formErrors.firstChoice && <p className="text-red-500 text-sm mt-1">{formErrors.firstChoice}</p>}
                 </div>
 
-                {/* Second Choice */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Bidang yang Anda minati (2nd Choice) <span className="text-red-500">*</span>
@@ -658,7 +620,6 @@ export default function RecruitmentPage() {
                     {formErrors.secondChoice && <p className="text-red-500 text-sm mt-1">{formErrors.secondChoice}</p>}
                 </div>
 
-                {/* Other Position */}
                 <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                         Apakah Anda bersedia dipertimbangkan untuk posisi lain apabila diperlukan? <span className="text-red-500">*</span>
@@ -690,7 +651,6 @@ export default function RecruitmentPage() {
                     {formErrors.otherPosition && <p className="text-red-500 text-sm mt-1">{formErrors.otherPosition}</p>}
                 </div>
 
-                {/* Statement File */}
                 <div>
                     <div className="flex items-center justify-between mb-1">
                         <label className="block text-sm font-medium text-gray-500">
@@ -725,7 +685,6 @@ export default function RecruitmentPage() {
                     )}
                 </div>
 
-                {/* CV File */}
                 <div>
                     <div className="flex items-center justify-between mb-1">
                         <label className="block text-sm font-medium text-gray-500">
@@ -752,21 +711,18 @@ export default function RecruitmentPage() {
                     )}
                 </div>
 
-                {/* Submit Error */}
                 {submitError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                         <p className="text-red-700 text-sm">{submitError}</p>
                     </div>
                 )}
 
-                {/* Submit Success */}
                 {submitSuccess && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                         <p className="text-green-700 text-sm">✅ Form berhasil dikirim!</p>
                     </div>
                 )}
 
-                {/* Submit Button */}
                 <button
                     onClick={handleSubmit}
                     disabled={submitting}
@@ -785,14 +741,24 @@ export default function RecruitmentPage() {
         );
     };
 
-    // Render Written Test
     const renderWrittenTest = () => {
         const hasSubmitted = applicationData?.testUrl;
-        const isCompleted = stageStatus[1] === 'completed';
-        const isPending = stageStatus[1] === 'pending';
-        const isTestReleased = false;
+        // currentStage = 0: Stage 0 complete, Stage 1 pending (show test upload)
+        // currentStage = 1: Stage 1 complete, Stage 2 pending (test completed)
+        // currentStage >= 2: Test is completed (already moved to interview or beyond)
+        const isCompleted = currentStage >= 1;
+        const isPending = currentStage === 0;
+        const isTestReleased = true;
 
-        // If test is not released yet, show waiting message
+        const isLate = () => {
+            if (!applicationData?.testSubmittedAt) return false;
+            const deadline = new Date('2026-09-16T23:59:00+08:00');
+            const submittedDate = new Date(applicationData.testSubmittedAt);
+            return submittedDate > deadline;
+        };
+
+        const submissionIsLate = isLate();
+
         if (!isTestReleased) {
             return (
                 <div className="text-center py-12">
@@ -817,10 +783,10 @@ export default function RecruitmentPage() {
                     <ul className="text-sm text-gray-700 space-y-2 list-disc list-inside">
                         <li>Maksimal 3000 kata (termasuk soal)</li>
                         <li>Font 'Times New Roman', Size 12, Spacing 1.5</li>
-                        <li>DEADLINE ??? 23.59 BJT</li>
+                        <li>DEADLINE: 23:59 BJT, 16 September 2026</li>
                         <li>Jawab semua pertanyaan langsung di bawah soal yang sudah disediakan</li>
                         <li>Upload file Anda ke kolom yang sudah disediakan di bawah</li>
-                        <li>Pastikan Anda telah mengganti nama file dengan KODE PESERTA</li>
+                        <li>DILARANG menyertakan informasi pribadi di dalam dokumen tes <i>(peserta akan bersifat anonim terhadap penguji untuk menghindari kecurangan)</i>.</li>
                         <li>DILARANG KERAS menggunakan bantuan AI dalam bentuk apapun, apabila terdeteksi adanya indikator penggunaan AI, Anda akan didiskualifikasi secara langsung.</li>
                     </ul>
                     <h4 className="font-semibold text-sm text-gray-800 mt-4">Catatan: Silahkan download test file menggunakan tombol di sebelah kanan kolom. All the best!</h4>
@@ -829,31 +795,45 @@ export default function RecruitmentPage() {
                 {hasSubmitted ? (
                     <div className={`rounded-lg p-6 text-center ${isCompleted
                         ? 'bg-green-50 border border-green-200'
-                        : isPending
-                            ? 'bg-blue-50 border border-blue-200'
-                            : 'bg-gray-50 border border-gray-200'
+                        : submissionIsLate
+                            ? 'bg-amber-50 border border-amber-200'
+                            : isPending
+                                ? 'bg-blue-50 border border-blue-200'
+                                : 'bg-gray-50 border border-gray-200'
                         }`}>
                         <div className="text-4xl mb-2">
-                            {isCompleted ? '🎉' : isPending ? '✅' : '📝'}
+                            {isCompleted
+                                ? '🎉'
+                                : submissionIsLate
+                                    ? '⚠️'
+                                    : isPending
+                                        ? '✅'
+                                        : '📝'}
                         </div>
                         <p className={`font-semibold ${isCompleted
                             ? 'text-green-700'
-                            : isPending
-                                ? 'text-blue-700'
-                                : 'text-gray-700'
+                            : submissionIsLate
+                                ? 'text-amber-700'
+                                : isPending
+                                    ? 'text-blue-700'
+                                    : 'text-gray-700'
                             }`}>
                             {isCompleted
                                 ? 'Congratulations! You have passed the Written Test stage!'
-                                : isPending
-                                    ? 'Your test has been submitted successfully!'
-                                    : 'Test submitted'}
+                                : submissionIsLate
+                                    ? 'Your test has been submitted, but it was LATE.'
+                                    : isPending
+                                        ? 'Your test has been submitted successfully!'
+                                        : 'Test submitted'}
                         </p>
                         <p className="text-sm text-gray-600 mt-1">
                             {isCompleted
                                 ? 'You may now proceed to the Interview stage. Please check back for your interview schedule.'
-                                : isPending
-                                    ? 'Your submission is being reviewed by the recruitment team.'
-                                    : 'Status: Unknown'}
+                                : submissionIsLate
+                                    ? 'Your submission was received after the deadline. This may affect your evaluation.'
+                                    : isPending
+                                        ? 'Your submission is being reviewed by the recruitment team.'
+                                        : 'Status: Unknown'}
                         </p>
                         {isCompleted && (
                             <div className="mt-3 p-3 bg-green-100 rounded-lg">
@@ -862,14 +842,29 @@ export default function RecruitmentPage() {
                                 </p>
                             </div>
                         )}
-                        {isPending && (
+                        {submissionIsLate && (
+                            <div className="mt-3 p-3 bg-amber-100 rounded-lg">
+                                <p className="text-sm text-amber-700">
+                                    ⚠️ Please contact the recruitment team if you have any concerns.
+                                </p>
+                            </div>
+                        )}
+                        {isPending && !submissionIsLate && (
                             <div className="mt-3 p-3 bg-blue-100 rounded-lg">
                                 <p className="text-sm text-blue-700">
                                     ⏳ Please wait while the recruitment team reviews your submission.
                                 </p>
                             </div>
                         )}
-                        <p className="text-xs text-gray-500 mt-2">Submitted on: {new Date(applicationData.testSubmittedAt).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                            Submitted on: {new Date(applicationData.testSubmittedAt).toLocaleString()}
+                            {submissionIsLate && (
+                                <span className="text-amber-600 ml-2 font-medium">(⚠️ Late Submission)</span>
+                            )}
+                            {!submissionIsLate && isPending && (
+                                <span className="text-green-600 ml-2 font-medium">(✅ On Time)</span>
+                            )}
+                        </p>
                         {applicationData.testUrl && (
                             <button
                                 onClick={() => window.open(applicationData.testUrl, '_blank')}
@@ -935,12 +930,12 @@ export default function RecruitmentPage() {
         );
     };
 
-    // Render Interview
     const renderInterview = () => {
-        // Check if interview details exist in the application data
         const hasInterviewDetails = applicationData?.interviewDateTime && applicationData?.interviewLocation;
 
-        // If interview is completed (stage 2 and 3), show interview completed view
+        // currentStage = 1: Stage 1 complete, Stage 2 pending (show interview schedule or waiting)
+        // currentStage >= 2: Stage 2 complete (interview completed)
+        // currentStage >= 3: Accepted
         if (currentStage >= 2) {
             return (
                 <div className="text-center py-12">
@@ -977,7 +972,6 @@ export default function RecruitmentPage() {
             );
         }
 
-        // If no interview details are set yet
         if (!hasInterviewDetails) {
             return (
                 <div className="text-center py-12">
@@ -996,7 +990,6 @@ export default function RecruitmentPage() {
             );
         }
 
-        // Interview details are available (still pending)
         return (
             <div className="space-y-6">
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
@@ -1036,13 +1029,6 @@ export default function RecruitmentPage() {
                     </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <p className="text-sm text-gray-600">
-                        📌 Please prepare a quiet environment with stable internet connection.
-                        You will receive the Zoom link via email 24 hours before your interview.
-                    </p>
-                </div>
-
                 <button
                     onClick={() => window.location.href = `mailto:recruitment@ppitsz.com`}
                     className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
@@ -1053,9 +1039,9 @@ export default function RecruitmentPage() {
         );
     };
 
-    // Render Accepted
     const renderAccepted = () => {
-        // If not yet accepted (interview done, waiting for decision)
+        // currentStage = 2: Stage 2 complete, Stage 3 pending (waiting for acceptance decision)
+        // currentStage = 3: Accepted
         if (currentStage === 2) {
             return (
                 <div className="text-center py-12">
@@ -1074,7 +1060,6 @@ export default function RecruitmentPage() {
             );
         }
 
-        // Accepted (Stage 3)
         return (
             <div className="text-center py-8">
                 <div className="text-6xl mb-4">🎉</div>
@@ -1096,7 +1081,6 @@ export default function RecruitmentPage() {
         );
     };
 
-    // Render Rejection
     const renderRejection = () => {
         const stageLabel = rejectedStage !== -1 ? stages[rejectedStage].title : "the selection process";
 
@@ -1150,7 +1134,6 @@ export default function RecruitmentPage() {
         );
     }
 
-    // If rejected, always show rejection view with frozen timeline
     const showRejection = isRejected;
 
     return (
@@ -1178,101 +1161,106 @@ export default function RecruitmentPage() {
                         </div>
 
                         <div className="mb-8">
-                            {/* Glass card wrapper for progress section */}
                             <div className={`bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/10 ${showRejection ? 'opacity-60' : ''}`}>
                                 <h2 className="text-xl md:text-2xl font-montserrat font-semibold text-white mb-6">
                                     My Application Progress:
                                 </h2>
 
-                                <div className="relative">
-                                    {/* Progress bar background */}
-                                    <div className="absolute left-0 right-0 top-8 h-1 bg-white/20 rounded-full"></div>
+                                {!showRejection && (
+                                    <div className="relative">
+                                        <div className="absolute left-0 right-0 top-8 h-1 bg-white/20 rounded-full"></div>
 
-                                    {/* Progress bar fill - don't show if rejected */}
-                                    {!showRejection && (
                                         <div
                                             className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
                                             style={{
-                                                width: `${(Object.values(stageStatus).filter(s => s === "completed").length / stages.length) * 100}%`,
+                                                width: `${[25, 55, 85, 100][currentStage] || 0}%`,
                                                 background: 'linear-gradient(to right, #fbbf24, #dc2626)',
                                             }}
                                         ></div>
-                                    )}
 
-                                    {/* Stage buttons */}
-                                    <div className="relative flex justify-between items-center">
-                                        {stages.map((stage, index) => {
-                                            const isActive = activeStage === index;
-                                            const isCompleted = isStageCompleted(index);
-                                            const isLocked = isStageLocked(index);
-                                            const isClickable = isStageClickable(index);
+                                        <div className="relative flex justify-between items-center">
+                                            {stages.map((stage, index) => {
+                                                const isActive = activeStage === index;
+                                                const isCompleted = isStageCompleted(index);
+                                                const isLocked = isStageLocked(index);
+                                                const isClickable = isStageClickable(index);
+                                                const isPending = isStagePending(index);
 
-                                            return (
-                                                <button
-                                                    key={stage.id}
-                                                    onClick={() => handleStageClick(index)}
-                                                    disabled={!isClickable || showRejection}
-                                                    className="group flex flex-col items-center relative z-10"
-                                                    title={showRejection ? "🔒 Application rejected" : isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
-                                                >
-                                                    <div className={`
-                                w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center
-                                text-2xl md:text-3xl font-montserrat font-bold
-                                transition-all duration-300 transform 
-                                ${isClickable && !showRejection ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
-                                border-4 shadow-lg
-                                ${isActive
-                                                            ? 'border-red-500 shadow-red-500/30 scale-110'
-                                                            : isCompleted
-                                                                ? 'border-green-400 shadow-green-400/20'
+                                                return (
+                                                    <button
+                                                        key={stage.id}
+                                                        onClick={() => handleStageClick(index)}
+                                                        disabled={!isClickable || showRejection}
+                                                        className="group flex flex-col items-center relative z-10"
+                                                        title={isLocked ? "🔒 This stage is locked" : isCompleted ? "✅ Completed" : "Click to view"}
+                                                    >
+                                                        <div className={`
+                                                            w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center
+                                                            text-2xl md:text-3xl font-montserrat font-bold
+                                                            transition-all duration-300 transform 
+                                                            ${isClickable && !showRejection ? 'hover:scale-110 cursor-pointer' : 'cursor-not-allowed'}
+                                                            border-4 shadow-lg
+                                                            ${isActive
+                                                                ? 'border-red-500 shadow-red-500/30 scale-110'
+                                                                : isCompleted
+                                                                    ? 'border-green-400 shadow-green-400/20'
+                                                                    : isLocked || showRejection
+                                                                        ? 'border-white/20 shadow-none opacity-50'
+                                                                        : 'border-amber-400 shadow-amber-400/20'
+                                                            }
+                                                            ${isCompleted
+                                                                ? `bg-gradient-to-br ${stage.color} text-white`
                                                                 : isLocked || showRejection
-                                                                    ? 'border-white/20 shadow-none opacity-50'
-                                                                    : 'border-amber-400 shadow-amber-400/20'
-                                                        }
-                                ${isCompleted
-                                                            ? `bg-gradient-to-br ${stage.color} text-white`
-                                                            : isLocked || showRejection
-                                                                ? 'bg-white/10 text-white/40'
+                                                                    ? 'bg-white/10 text-white/40'
+                                                                    : isActive
+                                                                        ? `bg-gradient-to-br ${stage.color} text-white`
+                                                                        : 'bg-white/20 backdrop-blur-sm text-white/80'
+                                                            }
+                                                        `}>
+                                                            {isCompleted ? '✓' : isLocked || showRejection ? '🔒' : stage.icon}
+                                                        </div>
+
+                                                        <span className={`
+                                                            mt-2 text-xs md:text-sm font-montserrat font-medium text-center max-w-[80px] md:max-w-none
+                                                            ${isCompleted
+                                                                ? 'text-green-300 font-bold'
                                                                 : isActive
-                                                                    ? `bg-gradient-to-br ${stage.color} text-white`
-                                                                    : 'bg-white/20 backdrop-blur-sm text-white/80'
-                                                        }
-                            `}>
-                                                        {isCompleted ? '✓' : isLocked || showRejection ? '🔒' : stage.icon}
-                                                    </div>
+                                                                    ? 'text-white font-bold drop-shadow-lg'
+                                                                    : isLocked || showRejection
+                                                                        ? 'text-white/40'
+                                                                        : 'text-white/80'
+                                                            }
+                                                        `}>
+                                                            {stage.title}
+                                                        </span>
 
-                                                    <span className={`
-                                mt-2 text-xs md:text-sm font-montserrat font-medium text-center max-w-[80px] md:max-w-none
-                                ${isCompleted
-                                                            ? 'text-green-300 font-bold'
-                                                            : isActive
-                                                                ? 'text-white font-bold drop-shadow-lg'
-                                                                : isLocked || showRejection
-                                                                    ? 'text-white/40'
-                                                                    : 'text-white/80'
-                                                        }
-                            `}>
-                                                        {stage.title}
-                                                    </span>
-
-                                                    <span className={`
-                                    text-xs font-montserrat mt-0.5
-                                    ${isCompleted
-                                                            ? 'text-green-300'
-                                                            : isActive
-                                                                ? 'text-amber-300 font-semibold'
-                                                                : isLocked || showRejection
-                                                                    ? 'text-white/30'
-                                                                    : 'text-white/60'
-                                                        }
-                                `}>
-                                                        {stageStatus[index] === 'rejected' ? '❌ Rejected' : isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : '📋 Pending'}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
+                                                        <span className={`
+                                                            text-xs font-montserrat mt-0.5
+                                                            ${isCompleted
+                                                                ? 'text-green-300'
+                                                                : isActive
+                                                                    ? 'text-amber-300 font-semibold'
+                                                                    : isLocked || showRejection
+                                                                        ? 'text-white/30'
+                                                                        : 'text-white/60'
+                                                            }
+                                                        `}>
+                                                            {isLocked ? '🔒 Locked' : isCompleted ? '✅ Completed' : isPending ? '📋 Pending' : '📋 Pending'}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {showRejection && (
+                                    <div className="text-center py-4">
+                                        <p className="text-white/60 text-sm font-montserrat">
+                                            ❌ Your application was not selected to proceed further.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1282,7 +1270,6 @@ export default function RecruitmentPage() {
 
                             <div className="p-6 md:p-8 lg:p-10">
                                 {showRejection ? (
-                                    // Rejection View
                                     <>
                                         <div className="flex items-center gap-3 mb-6">
                                             <span className="text-3xl">😔</span>
@@ -1298,7 +1285,6 @@ export default function RecruitmentPage() {
                                         {renderRejection()}
                                     </>
                                 ) : (
-                                    // Normal Stage View
                                     <>
                                         <div className="flex items-center gap-3 mb-6">
                                             <span className="text-3xl">
@@ -1347,19 +1333,18 @@ export default function RecruitmentPage() {
                                     </>
                                 )}
 
-                                {/* Navigation Buttons - hidden when rejected */}
                                 {!showRejection && (
                                     <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
                                         <button
                                             onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
                                             disabled={activeStage === 0 || isStageLocked(activeStage - 1)}
                                             className={`
-                                        px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
-                                        ${activeStage === 0 || isStageLocked(activeStage - 1)
+                                                px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
+                                                ${activeStage === 0 || isStageLocked(activeStage - 1)
                                                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
                                                 }
-                                      `}
+                                            `}
                                         >
                                             ← Previous
                                         </button>
@@ -1370,14 +1355,16 @@ export default function RecruitmentPage() {
                                             </span>
                                             <div className="flex gap-1">
                                                 {stages.map((_, idx) => {
-                                                    const status = stageStatus[idx];
+                                                    const isCompleted = isStageCompleted(idx);
+                                                    const isPending = isStagePending(idx);
+                                                    const isLocked = isStageLocked(idx);
                                                     return (
                                                         <div
                                                             key={idx}
                                                             className={`w-2 h-2 rounded-full transition-all duration-300
                                                                 ${idx === activeStage ? 'w-6 bg-red-600' :
-                                                                    status === 'completed' ? 'bg-green-500' :
-                                                                        status === 'pending' ? 'bg-amber-400' :
+                                                                    isCompleted ? 'bg-green-500' :
+                                                                        isPending ? 'bg-amber-400' :
                                                                             'bg-gray-300'}
                                                             `}
                                                         ></div>
@@ -1390,12 +1377,12 @@ export default function RecruitmentPage() {
                                             onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
                                             disabled={activeStage === stages.length - 1 || isStageLocked(activeStage + 1)}
                                             className={`
-                                        px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
-                                        ${activeStage === stages.length - 1 || isStageLocked(activeStage + 1)
+                                                px-6 py-2.5 rounded-lg font-montserrat font-medium transition-all duration-300
+                                                ${activeStage === stages.length - 1 || isStageLocked(activeStage + 1)
                                                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                                     : 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:shadow-red-300/50 hover:scale-105'
                                                 }
-                                      `}
+                                            `}
                                         >
                                             Next →
                                         </button>

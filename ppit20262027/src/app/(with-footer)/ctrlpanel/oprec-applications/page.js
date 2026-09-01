@@ -30,9 +30,10 @@ export default function AdminApplications() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [filterType, setFilterType] = useState(null); // 'firstChoice' or 'secondChoice'
+  const [filterType, setFilterType] = useState(null);
   const [selectedDivision, setSelectedDivision] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -76,40 +77,29 @@ export default function AdminApplications() {
 
   const applyFilters = () => {
     let filtered = [...applications];
-
     if (filterType && selectedDivision) {
       filtered = filtered.filter((app) => {
         const choice = filterType === 'firstChoice' ? app.firstChoice : app.secondChoice;
         return choice === selectedDivision;
       });
     }
-
     setFilteredApplications(filtered);
   };
 
   const exportEmails = async () => {
     setExporting(true);
     try {
-      // Use filtered applications if filter is active, otherwise all applications
       const dataToExport = filteredApplications.length > 0 ? filteredApplications : applications;
       const emails = [];
-
       dataToExport.forEach((app) => {
-        if (app.email) {
-          emails.push(app.email);
-        }
+        if (app.email) emails.push(app.email);
       });
-
       if (emails.length === 0) {
         alert("No emails found to export.");
         setExporting(false);
         return;
       }
-
-      // Create CSV content
       const csvContent = emails.join('\n');
-
-      // Create and download the file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -119,13 +109,65 @@ export default function AdminApplications() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
       alert(`✅ Exported ${emails.length} emails successfully!`);
     } catch (error) {
       console.error("Error exporting emails:", error);
       alert("Failed to export emails. Please try again.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  // ─── PUSH ALL CHANGES ──────────────────────────────────────
+  // This reads stageStatus from each application and updates currentStage accordingly
+  const pushAllChanges = async () => {
+    const confirmed = window.confirm(
+      `⚠️ PUSH ALL CHANGES\n\nThis will apply ALL pending stage changes to ALL applicants.\n\n• Applicants with 'rejected' in stageStatus → currentStage = 4\n• Applicants with stage 3 'completed' → currentStage = 3\n• Applicants with stage 2 'completed' → currentStage = 2\n• Applicants with stage 1 'completed' → currentStage = 1\n• All others remain at currentStage 0\n\nThis action CANNOT be undone. Are you sure?`
+    );
+
+    if (!confirmed) return;
+
+    setPushing(true);
+    try {
+      const batch = writeBatch(db);
+      let updatedCount = 0;
+
+      applications.forEach((app) => {
+        const status = app.stageStatus || {};
+        let newStage = 0;
+
+        // Check if rejected
+        if (Object.values(status).includes('rejected')) {
+          newStage = 4;
+        } else if (status[3] === 'completed') {
+          newStage = 3;
+        } else if (status[2] === 'completed') {
+          newStage = 2;
+        } else if (status[1] === 'completed') {
+          newStage = 1;
+        } else {
+          newStage = 0;
+        }
+
+        // Only update if stage has changed
+        if (app.currentStage !== newStage) {
+          const appRef = doc(db, "applications", app.uid);
+          batch.update(appRef, {
+            currentStage: newStage,
+            updatedAt: new Date().toISOString()
+          });
+          updatedCount++;
+        }
+      });
+
+      await batch.commit();
+      await fetchApplications();
+      alert(`✅ Successfully pushed changes to ${updatedCount} applicants!`);
+    } catch (error) {
+      console.error("Error pushing changes:", error);
+      alert("Failed to push changes. Please try again.");
+    } finally {
+      setPushing(false);
     }
   };
 
@@ -178,14 +220,9 @@ export default function AdminApplications() {
               className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               {exporting ? (
-                <>
-                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                  Exporting...
-                </>
+                <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> Exporting...</>
               ) : (
-                <>
-                  📧 Export Emails
-                </>
+                <>📧 Export Emails</>
               )}
             </button>
             <span className="text-sm text-gray-300">
@@ -200,42 +237,26 @@ export default function AdminApplications() {
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setFilterType('firstChoice');
-                  setSelectedDivision('');
-                }}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'firstChoice'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                onClick={() => { setFilterType('firstChoice'); setSelectedDivision(''); }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'firstChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
               >
                 First Choice
               </button>
               <button
-                onClick={() => {
-                  setFilterType('secondChoice');
-                  setSelectedDivision('');
-                }}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'secondChoice'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                onClick={() => { setFilterType('secondChoice'); setSelectedDivision(''); }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'secondChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
               >
                 Second Choice
               </button>
               {filterType && (
                 <button
-                  onClick={() => {
-                    setFilterType(null);
-                    setSelectedDivision('');
-                  }}
+                  onClick={() => { setFilterType(null); setSelectedDivision(''); }}
                   className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
                 >
                   ✕ Clear
                 </button>
               )}
             </div>
-
             {filterType && (
               <select
                 value={selectedDivision}
@@ -244,9 +265,7 @@ export default function AdminApplications() {
               >
                 <option value="">Select Division</option>
                 {DIVISIONS.map((div) => (
-                  <option key={div.code} value={div.name}>
-                    {div.name}
-                  </option>
+                  <option key={div.code} value={div.name}>{div.name}</option>
                 ))}
               </select>
             )}
@@ -259,48 +278,22 @@ export default function AdminApplications() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-red-50 to-amber-50">
                 <tr>
-                  {/* Comment out Applicant ID when you want to hide it */}
-                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Applicant ID
-                  </th> */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    First Choice
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Second Choice
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Current Stage
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Choice</th>
+                  <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Second Choice</th>
+                  <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stage</th>
+                  <th className="min-w-[200px] max-w-[240px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="min-w-[100px] max-w-[120px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredApplications.map((app) => (
                   <tr key={app.uid} className="hover:bg-gray-50 transition-colors">
-                    {/* Comment out this entire <td> to hide Applicant ID */}
-                    {/* <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {app.candidateId || app.uid.substring(0, 8)}
-                    </td> */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {app.name || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.firstChoice || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.secondChoice || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${app.currentStage === 0 ? 'bg-amber-100 text-amber-700' :
+                    <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td>
+                    <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.firstChoice || "-"}</td>
+                    <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.secondChoice || "-"}</td>
+                    <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold inline-block whitespace-nowrap ${app.currentStage === 0 ? 'bg-amber-100 text-amber-700' :
                         app.currentStage === 1 ? 'bg-blue-100 text-blue-700' :
                           app.currentStage === 2 ? 'bg-purple-100 text-purple-700' :
                             app.currentStage === 3 ? 'bg-green-100 text-green-700' :
@@ -309,20 +302,15 @@ export default function AdminApplications() {
                         {STAGES.find(s => s.index === app.currentStage)?.label || `Stage ${app.currentStage + 1}`}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex gap-1 flex-wrap">
+                    <td className="min-w-[200px] max-w-[240px] px-6 py-4 whitespace-nowrap">
+                      <div className="flex gap-1 flex-wrap items-center">
                         {Object.entries(app.stageStatus || {}).map(([key, value]) => (
-                          <span key={key} className="mr-1">
-                            {getStatusBadge(value)}
-                          </span>
+                          <span key={key} className="mr-1 whitespace-nowrap">{getStatusBadge(value)}</span>
                         ))}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <Link
-                        href={`/ctrlpanel/oprec-applications/${app.uid}`}
-                        className="text-red-600 hover:text-red-800 font-medium"
-                      >
+                    <td className="min-w-[100px] max-w-[120px] px-6 py-4 whitespace-nowrap text-sm">
+                      <Link href={`/ctrlpanel/oprec-applications/${app.uid}`} className="text-red-600 hover:text-red-800 font-medium whitespace-nowrap">
                         View Details
                       </Link>
                     </td>
@@ -333,53 +321,38 @@ export default function AdminApplications() {
           </div>
         </div>
 
-        {/* Timeline Update Section */}
+        {/* ─── PUSH ALL CHANGES BUTTON ─── */}
         <div className="bg-white rounded-xl shadow-lg p-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-6">Update All Applicants Stage</h3>
-          <p className="text-sm text-gray-500 mb-6">
-            Click on a stage to move ALL eligible applicants (excluding rejected ones) to that stage.
-          </p>
-
-          <div className="relative py-4">
-            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-300 transform -translate-y-1/2" style={{ left: '40px', right: '40px' }}></div>
-
-            <div className="relative flex justify-between items-center px-4">
-              {STAGES.filter(stage => stage.index !== 4).map((stage, index, filteredArray) => (
-                <div key={stage.index} className="flex flex-col items-center flex-1">
-                  <button
-                    onClick={() => updateAllStages(stage.index)}
-                    className={`
-              w-14 h-14 rounded-full flex items-center justify-center text-2xl 
-              transition-all duration-200 transform hover:scale-110
-              shadow-lg relative z-10
-              ${stage.index === 3
-                        ? 'bg-green-500 hover:bg-green-600 text-white'
-                        : 'bg-gradient-to-br from-red-400 to-amber-400 hover:from-red-500 hover:to-amber-500 text-white'
-                      }
-            `}
-                    title={`Move to ${stage.label}`}
-                  >
-                    {stage.emoji}
-                  </button>
-                  <span className="mt-2 text-xs font-medium text-gray-600 text-center">
-                    {stage.label}
-                  </span>
-                  {index < filteredArray.length - 1 && (
-                    <div className="absolute top-1/2 h-0.5 bg-gray-300 -translate-y-1/2 pointer-events-none"
-                      style={{
-                        left: `${(index + 1) * (100 / filteredArray.length) - (100 / (filteredArray.length * 2))}%`,
-                        right: `${(filteredArray.length - index - 2) * (100 / filteredArray.length) + (100 / (filteredArray.length * 2))}%`,
-                        width: `${100 / filteredArray.length}%`
-                      }}>
-                    </div>
-                  )}
-                </div>
-              ))}
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="mb-4">
+              <span className="text-4xl">📤</span>
             </div>
-          </div>
-
-          <div className="mt-6 text-xs text-gray-400 text-center">
-            * This will update all applicants currently displayed in the table (filtered view)
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Push All Changes</h3>
+            <p className="text-sm text-gray-500 max-w-2xl mb-4">
+              This will apply ALL pending stage changes to ALL applicants based on their <strong>stageStatus</strong>.
+              <br />
+              <span className="text-xs text-gray-400">
+                Applicants with 'rejected' → currentStage = 4 &nbsp;|&nbsp;
+                Stage 3 'completed' → currentStage = 3 &nbsp;|&nbsp;
+                Stage 2 'completed' → currentStage = 2 &nbsp;|&nbsp;
+                Stage 1 'completed' → currentStage = 1 &nbsp;|&nbsp;
+                Default → currentStage = 0
+              </span>
+            </p>
+            <button
+              onClick={pushAllChanges}
+              disabled={pushing || applications.length === 0}
+              className="px-8 py-3 bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-700 hover:to-amber-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-lg text-lg transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-3"
+            >
+              {pushing ? (
+                <><span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> Pushing Changes...</>
+              ) : (
+                <>🚀 Push All Changes</>
+              )}
+            </button>
+            <p className="text-xs text-gray-400 mt-3">
+              {pushing ? 'Applying changes to all applicants...' : `Ready to push changes to ${applications.length} applicants`}
+            </p>
           </div>
         </div>
 

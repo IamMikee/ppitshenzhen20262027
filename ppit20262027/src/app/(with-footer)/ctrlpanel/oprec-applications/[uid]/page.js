@@ -24,13 +24,11 @@ export default function ApplicationDetail() {
   const [savingInterview, setSavingInterview] = useState(false);
 
   // ─── MANUAL TOGGLES ───────────────────────────────────────────
-  // Set these to true/false to control what shows in the admin detail view
-  const showPersonalInfo = true;        // Show Personal Information section
-  const showEducation = true;           // Show Education section
-  const showApplicationDetails = true;  // Show Application Details section
-  const showDocuments = true;           // Show Documents section
-  const showTestAnswers = false;         // Show Test Answers section
-  const showInterviewPicker = false;     // Show Interview Schedule picker
+  const showPersonalInfo = true;
+  const showEducation = true;
+  const showApplicationDetails = true;
+  const showDocuments = true;
+  const showTestAnswers = false;
   // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -60,7 +58,6 @@ export default function ApplicationDetail() {
         const data = { id: appSnap.id, ...appSnap.data() };
         setApplication(data);
 
-        // Pre-fill interview fields if they exist
         if (data.interviewDateTime) {
           const dateObj = new Date(data.interviewDateTime);
           setInterviewDate(dateObj.toISOString().split('T')[0]);
@@ -106,6 +103,62 @@ export default function ApplicationDetail() {
     }
   };
 
+  // ─── STAGE STATUS ONLY — NO currentStage MODIFICATION ───
+  const updateStageStatusOnly = async (stageIndex, newStatus) => {
+    const appRef = doc(db, "applications", uid);
+    const updatedStageStatus = { ...application.stageStatus };
+    updatedStageStatus[stageIndex] = newStatus;
+
+    await updateDoc(appRef, {
+      stageStatus: updatedStageStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    await fetchApplication();
+  };
+
+  const handleStageComplete = async (stageIndex) => {
+    const stageLabel = getStageLabel(stageIndex);
+    const confirmed = window.confirm(
+      `Mark "${stageLabel}" as COMPLETED for ${application.name}?\n\nThis will also set the next stage to PENDING.`
+    );
+    if (!confirmed) return;
+
+    setUpdating(true);
+    try {
+      const appRef = doc(db, "applications", uid);
+      const updatedStageStatus = { ...application.stageStatus };
+
+      // Mark the current stage as completed
+      updatedStageStatus[stageIndex] = 'completed';
+
+      // Set the next stage to pending (if it exists and is not rejected)
+      if (stageIndex + 1 < 4 && updatedStageStatus[stageIndex + 1] !== 'rejected') {
+        updatedStageStatus[stageIndex + 1] = 'pending';
+      }
+
+      // Lock all future stages beyond the next one
+      for (let i = stageIndex + 2; i < 4; i++) {
+        if (updatedStageStatus[i] !== 'rejected') {
+          updatedStageStatus[i] = 'locked';
+        }
+      }
+
+      await updateDoc(appRef, {
+        stageStatus: updatedStageStatus,
+        updatedAt: new Date().toISOString()
+      });
+
+      await fetchApplication();
+      alert(`✅ "${stageLabel}" marked as completed. "${getStageLabel(stageIndex + 1)}" is now pending.`);
+    } catch (error) {
+      console.error("Error updating stage:", error);
+      alert("Failed to update stage. Please try again.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleReject = async () => {
     const currentStage = application.currentStage;
     const stageLabel = getStageLabel(currentStage);
@@ -120,12 +173,9 @@ export default function ApplicationDetail() {
     try {
       const appRef = doc(db, "applications", uid);
       const updatedStageStatus = { ...application.stageStatus };
-
-      // Only mark the current stage as rejected
       updatedStageStatus[currentStage] = 'rejected';
 
       await updateDoc(appRef, {
-        currentStage: 4,
         stageStatus: updatedStageStatus,
         updatedAt: new Date().toISOString()
       });
@@ -141,15 +191,7 @@ export default function ApplicationDetail() {
   };
 
   const handleUnreject = async () => {
-    const currentStage = application.currentStage;
-
-    if (currentStage !== 4) {
-      alert("This applicant is not currently rejected.");
-      return;
-    }
-
-    // Find which stage was rejected
-    let rejectedStageIndex = 0;
+    let rejectedStageIndex = -1;
     for (let i = 0; i < 4; i++) {
       if (application.stageStatus?.[i] === 'rejected') {
         rejectedStageIndex = i;
@@ -157,128 +199,24 @@ export default function ApplicationDetail() {
       }
     }
 
+    if (rejectedStageIndex === -1) {
+      alert("No rejected stage found.");
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Are you sure you want to UNREJECT ${application.name}?\n\nThis will revert them back to "${getStageLabel(rejectedStageIndex)}" stage with "completed" status.\nThey will be moved to the next stage (pending).`
+      `Are you sure you want to UNREJECT ${application.name}?\n\nThis will set "${getStageLabel(rejectedStageIndex)}" back to "completed".`
     );
 
     if (!confirmed) return;
 
     setUpdating(true);
     try {
-      const appRef = doc(db, "applications", uid);
-      const updatedStageStatus = { ...application.stageStatus };
-
-      // Find and revert the rejected stage
-      let hasRejected = false;
-      for (let i = 0; i < 4; i++) {
-        if (updatedStageStatus[i] === 'rejected') {
-          // Set the rejected stage back to completed (they already completed it)
-          updatedStageStatus[i] = 'completed';
-          hasRejected = true;
-          rejectedStageIndex = i;
-          break;
-        }
-      }
-
-      if (hasRejected) {
-        // Set the next stage to pending (if it exists)
-        if (rejectedStageIndex + 1 < 4) {
-          updatedStageStatus[rejectedStageIndex + 1] = 'pending';
-        }
-        // Lock all future stages beyond the next one
-        for (let i = rejectedStageIndex + 2; i < 4; i++) {
-          updatedStageStatus[i] = 'locked';
-        }
-      }
-
-      await updateDoc(appRef, {
-        currentStage: rejectedStageIndex, // Move back to the stage they were rejected at
-        stageStatus: updatedStageStatus,
-        updatedAt: new Date().toISOString()
-      });
-
-      await fetchApplication();
-      alert(`✅ ${application.name} has been unrejected and returned to "${getStageLabel(rejectedStageIndex)}" stage.`);
+      await updateStageStatusOnly(rejectedStageIndex, 'completed');
+      alert(`✅ ${application.name} has been unrejected.`);
     } catch (error) {
       console.error("Error unrejecting applicant:", error);
       alert("Failed to unreject applicant. Please try again.");
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleStageUpdate = async (newStage) => {
-    // Don't allow stage update if rejected
-    if (application.currentStage === 4) {
-      alert("This applicant has been rejected. Please unreject them first to update their stage.");
-      return;
-    }
-
-    // Check if the new stage is already completed
-    if (application.stageStatus?.[newStage] === 'completed') {
-      alert(`This applicant has already completed the "${getStageLabel(newStage)}" stage.`);
-      return;
-    }
-
-    // Check if the new stage is locked (can't skip ahead)
-    if (application.stageStatus?.[newStage] === 'locked') {
-      const currentStage = application.currentStage;
-      alert(`Cannot skip to "${getStageLabel(newStage)}". Please complete "${getStageLabel(currentStage)}" first.`);
-      return;
-    }
-
-    const stageLabels = ["Form", "Written Test", "Interview", "Accepted"];
-    const confirmed = window.confirm(
-      `Move ${application.name} to "${stageLabels[newStage]}" stage?\n\nCurrent stage: ${stageLabels[application.currentStage] || "Unknown"}`
-    );
-
-    if (!confirmed) return;
-
-    setUpdating(true);
-    try {
-      const appRef = doc(db, "applications", uid);
-      const updatedStageStatus = { ...application.stageStatus };
-
-      if (newStage === 3) {
-        // Mark all stages as completed for acceptance
-        for (let i = 0; i <= 3; i++) {
-          if (updatedStageStatus[i] !== 'rejected') {
-            updatedStageStatus[i] = "completed";
-          }
-        }
-      } else {
-        // Mark stages up to newStage as completed
-        for (let i = 0; i <= newStage; i++) {
-          if (updatedStageStatus[i] !== 'rejected') {
-            updatedStageStatus[i] = "completed";
-          }
-        }
-
-        // Mark the next stage as pending (if it exists)
-        if (newStage + 1 < 4) {
-          if (updatedStageStatus[newStage + 1] !== 'rejected') {
-            updatedStageStatus[newStage + 1] = "pending";
-          }
-        }
-
-        // Mark all future stages as locked
-        for (let i = newStage + 2; i < 4; i++) {
-          if (updatedStageStatus[i] !== 'rejected') {
-            updatedStageStatus[i] = "locked";
-          }
-        }
-      }
-
-      await updateDoc(appRef, {
-        currentStage: newStage,
-        stageStatus: updatedStageStatus,
-        updatedAt: new Date().toISOString()
-      });
-
-      await fetchApplication();
-    } catch (error) {
-      console.error("Error updating stage:", error);
-      alert("Failed to update stage. Please try again.");
     } finally {
       setUpdating(false);
     }
@@ -337,9 +275,10 @@ export default function ApplicationDetail() {
     );
   }
 
-  const isRejected = application.currentStage === 4;
+  const isRejected = Object.values(application.stageStatus || {}).includes('rejected');
+  const currentStage = application.currentStage;
+  const shouldShowInterviewPicker = currentStage >= 1;
 
-  // Find which stage was rejected
   let rejectedStageIndex = -1;
   if (isRejected) {
     for (let i = 0; i < 4; i++) {
@@ -370,7 +309,6 @@ export default function ApplicationDetail() {
                   Application Details
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
-                  <span className="font-medium text-gray-700">{application.name}</span> •
                   Submitted on {new Date(application.submittedAt).toLocaleDateString('id-ID', {
                     day: 'numeric',
                     month: 'long',
@@ -389,7 +327,7 @@ export default function ApplicationDetail() {
           </div>
         </div>
 
-        {/* Personal Information - Toggle ON/OFF */}
+        {/* Personal Information */}
         {showPersonalInfo && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -422,7 +360,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Education - Toggle ON/OFF */}
+        {/* Education */}
         {showEducation && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -447,7 +385,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Application Details - Toggle ON/OFF */}
+        {/* Application Details */}
         {showApplicationDetails && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -480,7 +418,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Documents - Toggle ON/OFF */}
+        {/* Documents */}
         {showDocuments && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -533,7 +471,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Test Answers - Toggle ON/OFF */}
+        {/* Test Answers */}
         {showTestAnswers && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
@@ -546,19 +484,31 @@ export default function ApplicationDetail() {
                 <p className="text-sm text-gray-500 font-medium">Test Submission</p>
                 {application.testUrl ? (
                   <div className="mt-2 space-y-2">
-                    <a
-                      href={application.testUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                        <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
-                        <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
-                      </svg>
-                      View Test Answers
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={application.testUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                          <path d="M10 11a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
+                          <path d="M9 7a1 1 0 011 1v1a1 1 0 11-2 0V8a1 1 0 011-1z" />
+                        </svg>
+                        View Test Answers
+                      </a>
+                      {application.testSubmittedAt && (() => {
+                        const deadline = new Date('2026-09-16T23:59:00+08:00');
+                        const submittedDate = new Date(application.testSubmittedAt);
+                        const isLate = submittedDate > deadline;
+                        return isLate ? (
+                          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                            ⚠️ LATE
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
                     {application.testSubmittedAt && (
                       <p className="text-xs text-gray-400">
                         Submitted on: {new Date(application.testSubmittedAt).toLocaleString('id-ID', {
@@ -568,6 +518,16 @@ export default function ApplicationDetail() {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
+                        {(() => {
+                          const deadline = new Date('2026-09-16T23:59:00+08:00');
+                          const submittedDate = new Date(application.testSubmittedAt);
+                          const isLate = submittedDate > deadline;
+                          return isLate ? (
+                            <span className="text-red-600 ml-2 font-medium">(Late Submission)</span>
+                          ) : (
+                            <span className="text-green-600 ml-2 font-medium">(On Time)</span>
+                          );
+                        })()}
                       </p>
                     )}
                   </div>
@@ -579,8 +539,8 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Interview Time Picker - Toggle ON/OFF */}
-        {showInterviewPicker && (
+        {/* Interview Time Picker */}
+        {shouldShowInterviewPicker && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b">
               <h2 className="text-lg font-semibold font-montserrat text-gray-800">
@@ -668,7 +628,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Progress Status & Actions - Always visible */}
+        {/* Progress Status & Actions */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
           <div className="px-6 py-4 bg-gray-50 border-b">
             <h2 className="text-lg font-semibold font-montserrat text-gray-800">
@@ -708,34 +668,34 @@ export default function ApplicationDetail() {
               })}
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - ONLY stageStatus modifications */}
             <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-200">
               {!isRejected && (
                 <>
                   <button
-                    onClick={() => handleStageUpdate(0)}
-                    disabled={updating || application.currentStage === 0 || application.stageStatus?.[0] === 'completed'}
+                    onClick={() => handleStageComplete(0)}
+                    disabled={updating || application.stageStatus?.[0] === 'completed'}
                     className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
-                    Form
+                    Complete Form
                   </button>
                   <button
-                    onClick={() => handleStageUpdate(1)}
-                    disabled={updating || application.currentStage === 1 || application.stageStatus?.[1] === 'completed' || application.stageStatus?.[0] !== 'completed'}
+                    onClick={() => handleStageComplete(1)}
+                    disabled={updating || application.stageStatus?.[1] === 'completed' || application.stageStatus?.[0] !== 'completed'}
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
-                    Written Test
+                    Complete Written Test
                   </button>
                   <button
-                    onClick={() => handleStageUpdate(2)}
-                    disabled={updating || application.currentStage === 2 || application.stageStatus?.[2] === 'completed' || application.stageStatus?.[1] !== 'completed'}
+                    onClick={() => handleStageComplete(2)}
+                    disabled={updating || application.stageStatus?.[2] === 'completed' || application.stageStatus?.[1] !== 'completed'}
                     className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
-                    Interview
+                    Complete Interview
                   </button>
                   <button
-                    onClick={() => handleStageUpdate(3)}
-                    disabled={updating || application.currentStage === 3 || application.stageStatus?.[2] !== 'completed'}
+                    onClick={() => handleStageComplete(3)}
+                    disabled={updating || application.stageStatus?.[3] === 'completed' || application.stageStatus?.[2] !== 'completed'}
                     className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
                     Accept ✅
