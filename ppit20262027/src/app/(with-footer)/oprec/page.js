@@ -161,26 +161,22 @@ export default function RecruitmentPage() {
 
     const isStageClickable = (stageIndex) => {
         if (isRejected) return false;
-        // Can click on completed stages (0 to currentStage) and the pending stage (currentStage + 1)
-        return stageIndex <= currentStage + 1;
+        return formSubmitted ? stageIndex <= currentStage + 1 : stageIndex === 0;
     };
 
     const isStageCompleted = (stageIndex) => {
         if (isRejected) return false;
-        // Completed if index is less than or equal to currentStage
-        return stageIndex <= currentStage;
+        return stageIndex !== 0 ? stageIndex <= currentStage : formSubmitted;
     };
 
     const isStageLocked = (stageIndex) => {
         if (isRejected) return true;
-        // Locked if index is greater than currentStage + 1 (beyond the pending stage)
-        return stageIndex > currentStage + 1;
+        return formSubmitted ? stageIndex > currentStage + 1 : stageIndex > currentStage;
     };
 
     const isStagePending = (stageIndex) => {
         if (isRejected) return false;
-        // Pending if index is exactly currentStage + 1
-        return stageIndex === currentStage + 1;
+        return formSubmitted ? stageIndex === currentStage + 1 : stageIndex === currentStage;
     };
 
     const handleStageClick = (index) => {
@@ -368,6 +364,12 @@ export default function RecruitmentPage() {
                 statementUrl: statementUrl,
                 cvUrl: cvUrl,
                 currentStage: 0,
+                stageStatus: {
+                    0: "completed",
+                    1: "pending",
+                    2: "locked",
+                    3: "locked"
+                },
                 submittedAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -748,7 +750,7 @@ export default function RecruitmentPage() {
         // currentStage >= 2: Test is completed (already moved to interview or beyond)
         const isCompleted = currentStage >= 1;
         const isPending = currentStage === 0;
-        const isTestReleased = true;
+        const isTestReleased = false;
 
         const isLate = () => {
             if (!applicationData?.testSubmittedAt) return false;
@@ -1173,7 +1175,7 @@ export default function RecruitmentPage() {
                                         <div
                                             className="absolute left-0 top-8 h-1 rounded-full transition-all duration-500"
                                             style={{
-                                                width: `${[25, 55, 85, 100][currentStage] || 0}%`,
+                                                width: !formSubmitted ? "0%" : `${[25, 55, 85, 100][currentStage] || 0}%`,
                                                 background: 'linear-gradient(to right, #fbbf24, #dc2626)',
                                             }}
                                         ></div>
