@@ -24,6 +24,50 @@ const STAGES = [
   { index: 4, label: "Rejected", emoji: "❌" },
 ];
 
+const universityChecks = {
+  cuhksz: (name) => {
+    const lower = name.toLowerCase();
+    return /^(the|c)/.test(lower) || /chinese/.test(lower) || /cuhk/.test(lower);
+  },
+  hitsz: (name) => {
+    const lower = name.toLowerCase();
+    return /^h/.test(lower) || /hitsz/.test(lower) || /harbin/.test(lower);
+  },
+  sustech: (name) => {
+    const lower = name.toLowerCase();
+    return /sustech/.test(lower) || /southern/.test(lower);
+  },
+  tsinghua: (name) => {
+    const lower = name.toLowerCase();
+    return /tsinghua/.test(lower) || /qinghua/.test(lower) || /清华/.test(lower);
+  },
+  shenda: (name) => {
+    const lower = name.toLowerCase();
+    // Exclude everything else first
+    if (/^(the|t|c)/.test(lower) || /chinese/.test(lower) || /cuhk/.test(lower)) return false;
+    if (/^h/.test(lower) || /hitsz/.test(lower) || /harbin/.test(lower)) return false;
+    if (/sustech/.test(lower) || /southern/.test(lower)) return false;
+    if (/tsinghua/.test(lower) || /qinghua/.test(lower)) return false;
+    return /shenzhen/.test(lower) || /szu/.test(lower) || /shenda/.test(lower);
+  }
+};
+
+const UNIVERSITY_FILTERS = [
+  { label: "CUHKSZ", value: "cuhksz", check: universityChecks.cuhksz },
+  { label: "HITSZ", value: "hitsz", check: universityChecks.hitsz },
+  { label: "SUSTech", value: "sustech", check: universityChecks.sustech },
+  { label: "Tsinghua", value: "tsinghua", check: universityChecks.tsinghua },
+  { label: "Shenda (SZU)", value: "shenda", check: universityChecks.shenda },
+  {
+    label: "Others",
+    value: "others",
+    check: (name) => {
+      // If it doesn't match any of the above, it's "Others"
+      return !Object.values(universityChecks).some(check => check(name));
+    }
+  },
+];
+
 export default function AdminApplications() {
   const [applications, setApplications] = useState([]);
   const [filteredApplications, setFilteredApplications] = useState([]);
@@ -32,6 +76,7 @@ export default function AdminApplications() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [filterType, setFilterType] = useState(null);
   const [selectedDivision, setSelectedDivision] = useState("");
+  const [selectedUniversity, setSelectedUniversity] = useState("");
   const [exporting, setExporting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const router = useRouter();
@@ -57,7 +102,7 @@ export default function AdminApplications() {
 
   useEffect(() => {
     applyFilters();
-  }, [applications, filterType, selectedDivision]);
+  }, [applications, filterType, selectedDivision, selectedUniversity]);
 
   const fetchApplications = async () => {
     try {
@@ -77,12 +122,26 @@ export default function AdminApplications() {
 
   const applyFilters = () => {
     let filtered = [...applications];
+
+    // Filter by division choice
     if (filterType && selectedDivision) {
       filtered = filtered.filter((app) => {
         const choice = filterType === 'firstChoice' ? app.firstChoice : app.secondChoice;
         return choice === selectedDivision;
       });
     }
+
+    // Filter by university
+    if (selectedUniversity) {
+      const filter = UNIVERSITY_FILTERS.find(f => f.value === selectedUniversity);
+      if (filter) {
+        filtered = filtered.filter((app) => {
+          const uniName = app.university || "";
+          return filter.check(uniName);
+        });
+      }
+    }
+
     setFilteredApplications(filtered);
   };
 
@@ -119,7 +178,6 @@ export default function AdminApplications() {
   };
 
   // ─── PUSH ALL CHANGES ──────────────────────────────────────
-  // This reads stageStatus from each application and updates currentStage accordingly
   const pushAllChanges = async () => {
     const confirmed = window.confirm(
       `⚠️ PUSH ALL CHANGES\n\nThis will apply ALL pending stage changes to ALL applicants.\n\n• Applicants with 'rejected' in stageStatus → currentStage = 4\n• Applicants with stage 3 'completed' → currentStage = 3\n• Applicants with stage 2 'completed' → currentStage = 2\n• Applicants with stage 1 'completed' → currentStage = 1\n• All others remain at currentStage 0\n\nThis action CANNOT be undone. Are you sure?`
@@ -136,7 +194,6 @@ export default function AdminApplications() {
         const status = app.stageStatus || {};
         let newStage = 0;
 
-        // Check if rejected
         if (Object.values(status).includes('rejected')) {
           newStage = 4;
         } else if (status[3] === 'completed') {
@@ -149,7 +206,6 @@ export default function AdminApplications() {
           newStage = 0;
         }
 
-        // Only update if stage has changed
         if (app.currentStage !== newStage) {
           const appRef = doc(db, "applications", app.uid);
           batch.update(appRef, {
@@ -233,43 +289,89 @@ export default function AdminApplications() {
 
         {/* Filter Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Division</h3>
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setFilterType('firstChoice'); setSelectedDivision(''); }}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'firstChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                First Choice
-              </button>
-              <button
-                onClick={() => { setFilterType('secondChoice'); setSelectedDivision(''); }}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterType === 'secondChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                Second Choice
-              </button>
-              {filterType && (
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Filter Options</h3>
+          <div className="flex flex-wrap gap-6 items-start">
+            {/* Division Filter */}
+            <div className="flex-1 min-w-[200px]">
+              <p className="text-xs text-gray-500 font-medium mb-1">Division</p>
+              <div className="flex flex-wrap gap-2 items-center">
                 <button
-                  onClick={() => { setFilterType(null); setSelectedDivision(''); }}
-                  className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  onClick={() => { setFilterType('firstChoice'); setSelectedDivision(''); }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filterType === 'firstChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                 >
-                  ✕ Clear
+                  First Choice
                 </button>
+                <button
+                  onClick={() => { setFilterType('secondChoice'); setSelectedDivision(''); }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filterType === 'secondChoice' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  Second Choice
+                </button>
+                {filterType && (
+                  <button
+                    onClick={() => { setFilterType(null); setSelectedDivision(''); }}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+                {filterType && (
+                  <select
+                    value={selectedDivision}
+                    onChange={(e) => setSelectedDivision(e.target.value)}
+                    className="border text-gray-500 border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                  >
+                    <option value="">Select Division</option>
+                    {DIVISIONS.map((div) => (
+                      <option key={div.code} value={div.name}>{div.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* University Filter */}
+            <div className="flex-1 min-w-[150px]">
+              <p className="text-xs text-gray-500 font-medium mb-1">University</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  value={selectedUniversity}
+                  onChange={(e) => setSelectedUniversity(e.target.value)}
+                  className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">All Universities</option>
+                  {UNIVERSITY_FILTERS.map((uf) => (
+                    <option key={uf.value} value={uf.value}>{uf.label}</option>
+                  ))}
+                </select>
+                {selectedUniversity && (
+                  <button
+                    onClick={() => setSelectedUniversity('')}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Active filters display */}
+          {(filterType || selectedUniversity) && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+              <span className="text-xs text-gray-500">Active filters:</span>
+              {filterType && selectedDivision && (
+                <span className="px-2 py-0.5 bg-red-50 text-red-700 rounded-full text-xs">
+                  {filterType === 'firstChoice' ? '1st' : '2nd'}: {selectedDivision}
+                </span>
+              )}
+              {selectedUniversity && (
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
+                  Uni: {UNIVERSITY_FILTERS.find(f => f.value === selectedUniversity)?.label}
+                </span>
               )}
             </div>
-            {filterType && (
-              <select
-                value={selectedDivision}
-                onChange={(e) => setSelectedDivision(e.target.value)}
-                className="border text-gray-500 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                <option value="">Select Division</option>
-                {DIVISIONS.map((div) => (
-                  <option key={div.code} value={div.name}>{div.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Table Section */}
@@ -279,6 +381,7 @@ export default function AdminApplications() {
               <thead className="bg-gradient-to-r from-red-50 to-amber-50">
                 <tr>
                   <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="min-w-[180px] max-w-[220px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Second Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stage</th>
@@ -290,6 +393,7 @@ export default function AdminApplications() {
                 {filteredApplications.map((app) => (
                   <tr key={app.uid} className="hover:bg-gray-50 transition-colors">
                     <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td>
+                    <td className="min-w-[180px] max-w-[220px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.university || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.firstChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.secondChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap">
