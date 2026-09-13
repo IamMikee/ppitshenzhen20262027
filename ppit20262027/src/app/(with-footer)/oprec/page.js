@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../../lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from "firebase/firestore";
 import Header from "../../../app/Components/Header";
 import LoadingScreen from "../../../app/Components/LoadingScreen";
 
@@ -47,6 +47,10 @@ export default function RecruitmentPage() {
     const [testFileError, setTestFileError] = useState("");
     const [testSubmitting, setTestSubmitting] = useState(false);
     const [testSubmitSuccess, setTestSubmitSuccess] = useState(false);
+
+    // Close Registration state
+    const [hasApplication, setHasApplication] = useState(false);
+    const [checkingApplication, setCheckingApplication] = useState(true);
 
     // Application stages data
     const stages = [
@@ -150,6 +154,32 @@ export default function RecruitmentPage() {
 
         return () => unsub();
     }, []);
+
+    // Check if user has an application in Firestore
+    useEffect(() => {
+        if (!user) {
+            setHasApplication(false);
+            setCheckingApplication(false);
+            return;
+        }
+
+        setCheckingApplication(true);
+        const appDocRef = doc(db, "applications", user.uid);
+        const unsub = onSnapshot(
+            appDocRef,
+            (docSnap) => {
+                setHasApplication(docSnap.exists());
+                setCheckingApplication(false);
+            },
+            (error) => {
+                console.error("Error checking application:", error);
+                setHasApplication(false);
+                setCheckingApplication(false);
+            }
+        );
+
+        return () => unsub();
+    }, [user]);
 
     // ─── STAGE HELPER FUNCTIONS ──────────────────────────────
     // currentStage meanings:
@@ -1131,6 +1161,24 @@ export default function RecruitmentPage() {
             <div style={{ minHeight: "100vh", backgroundColor: "#7E0C0E", fontFamily: "Arial, sans-serif", margin: 0, padding: 0 }}>
                 <div className="font-montserrat" style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", fontWeight: "bolder", color: "white", textAlign: "center", padding: "0 1rem" }}>
                     Please log in to view your application progress.
+                </div>
+            </div>
+        );
+    }
+
+    if (checkingApplication) {
+        return (
+            <div style={{ minHeight: "100vh", backgroundColor: "#7E0C0E", fontFamily: "Arial, sans-serif", margin: 0, padding: 0 }}>
+                <div className="font-montserrat" style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3rem", fontWeight: "bolder", color: "white" }}>Loading...</div>
+            </div>
+        );
+    }
+
+    if (!hasApplication) {
+        return (
+            <div style={{ minHeight: "100vh", backgroundColor: "#7E0C0E", fontFamily: "Arial, sans-serif", margin: 0, padding: 0 }}>
+                <div className="font-montserrat" style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", fontWeight: "bolder", color: "white", textAlign: "center", padding: "0 1rem" }}>
+                    We are no longer accepting new open recruitment applications.
                 </div>
             </div>
         );

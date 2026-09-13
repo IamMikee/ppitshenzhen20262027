@@ -10,8 +10,48 @@ import sweatercewe from "../../../public/Home/sweatercewe.webp";
 import sweatercowo from "../../../public/Home/sweatercowo.webp";
 import GuidebookImage from "../../../public/Home/fotoguidebook.webp";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { auth, db } from "../../lib/firebase";
 
 export default function Home() {
+	const [user, setUser] = useState(null);
+	const [isLoading, setIsLoading] = useState(true);
+	const [hasApplication, setHasApplication] = useState(false);
+
+	useEffect(() => {
+		const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+			setUser(currentUser);
+			if (!currentUser) {
+				setHasApplication(false);
+				setIsLoading(false);
+			}
+		});
+		return () => unsubscribe();
+	}, []);
+
+	useEffect(() => {
+		if (!user) return;
+
+		setIsLoading(true);
+		const appDocRef = doc(db, "applications", user.uid);
+
+		const unsubscribe = onSnapshot(
+			appDocRef,
+			(docSnap) => {
+				setHasApplication(docSnap.exists());
+				setIsLoading(false);
+			},
+			(error) => {
+				console.error("Error fetching application:", error);
+				setHasApplication(false);
+				setIsLoading(false);
+			}
+		);
+
+		return () => unsubscribe();
+	}, [user]);
 
 	const universities = [
 		{
@@ -46,6 +86,8 @@ export default function Home() {
 		},
 	];
 
+	const showOprecOverlay = !isLoading && user && hasApplication;
+
 	return (
 		<>
 			{/* Hero Section */}
@@ -72,36 +114,39 @@ export default function Home() {
 						quality={75}
 					/>
 
-					{/* OPEN RECRUITMENT SPECIAL */}
-					<div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
-						{/* "Join Us Now!" text with animation */}
-						<p className="text-white/80 font-extrabold text-sm md:text-base uppercase tracking-[0.3em] mb-4 animate-pulse font-light">
-							Join Us Now!
-						</p>
-
-						{/* Main Button */}
-						<Link
-							href="/oprec"
-							className="group relative px-8 py-4 md:px-12 md:py-5 overflow-hidden rounded-full
-							bg-gradient-to-r from-red-600 via-orange-400 to-red-600
-							bg-[length:200%_100%] animate-shimmer
-							hover:shadow-2xl hover:shadow-orange-500/30
-							transform transition-all duration-300 hover:scale-105
-							border border-white/20"
-						>
-							{/* Button background glow effect */}
-							<span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
-
-							{/* Button text */}
-							<span className="relative text-white font-bold text-xl md:text-2xl tracking-wider drop-shadow-lg">
+					{/* OPEN RECRUITMENT SPECIAL — only visible to applicants */}
+					{showOprecOverlay && (
+						<div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
+							{/* "Join Us Now!" text with animation */}
+							<p className="text-white/80 font-extrabold text-sm md:text-base uppercase tracking-[0.3em] mb-4 animate-pulse font-light">
+								{/* Join Us Now! */}
 								Open Recruitment
-							</span>
-						</Link>
+							</p>
 
-						{/* Decorative line under button */}
-						<div className="w-12 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent mt-6"></div>
-					</div>
+							{/* Main Button */}
+							<Link
+								href="/oprec"
+								className="group relative px-8 py-4 md:px-12 md:py-5 overflow-hidden rounded-full
+								bg-gradient-to-r from-red-600 via-orange-400 to-red-600
+								bg-[length:200%_100%] animate-shimmer
+								hover:shadow-2xl hover:shadow-orange-500/30
+								transform transition-all duration-300 hover:scale-105
+								border border-white/20"
+							>
+								{/* Button background glow effect */}
+								<span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
 
+								{/* Button text */}
+								<span className="relative text-white font-bold text-xl md:text-2xl tracking-wider drop-shadow-lg">
+									{/* Open Recruitment */}
+									Check Your Progress
+								</span>
+							</Link>
+
+							{/* Decorative line under button */}
+							<div className="w-12 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent mt-6"></div>
+						</div>
+					)}
 
 					<div className="absolute inset-x-0 bottom-10 flex flex-col items-center z-10">
 						<Link
@@ -140,7 +185,6 @@ export default function Home() {
 						preserveAspectRatio="none"
 						className="w-full h-full"
 					>
-						{/* Base red wave */}
 						<path
 							d="M0 96L48 106.7C96 117 192 139 288 160C384 181 480 181 576 160C672 139 768 96 864 80C960 64 1056 75 1152 96C1248 117 1344 149 1392 165.3L1440 181V320H0V96Z"
 							fill="#7E0C0E"
