@@ -780,7 +780,7 @@ export default function RecruitmentPage() {
         // currentStage >= 2: Test is completed (already moved to interview or beyond)
         const isCompleted = currentStage >= 1;
         const isPending = currentStage === 0;
-        const isTestReleased = false;
+        const isTestReleased = true;
 
         const isLate = () => {
             if (!applicationData?.testSubmittedAt) return false;
