@@ -62,7 +62,6 @@ const UNIVERSITY_FILTERS = [
     label: "Others",
     value: "others",
     check: (name) => {
-      // If it doesn't match any of the above, it's "Others"
       return !Object.values(universityChecks).some(check => check(name));
     }
   },
@@ -380,8 +379,9 @@ export default function AdminApplications() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-red-50 to-amber-50">
                 <tr>
-                  <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="min-w-[180px] max-w-[220px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
+                  {/* <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th> */}
+                  <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applicant ID</th>
+                  {/* <th className="min-w-[180px] max-w-[220px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th> */}
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Second Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stage</th>
@@ -392,8 +392,9 @@ export default function AdminApplications() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredApplications.map((app) => (
                   <tr key={app.uid} className="hover:bg-gray-50 transition-colors">
-                    <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td>
-                    <td className="min-w-[180px] max-w-[220px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.university || "-"}</td>
+                    {/* <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td> */}
+                    <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.candidateId || "-"}</td>
+                    {/* <td className="min-w-[180px] max-w-[220px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.university || "-"}</td> */}
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.firstChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.secondChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap">

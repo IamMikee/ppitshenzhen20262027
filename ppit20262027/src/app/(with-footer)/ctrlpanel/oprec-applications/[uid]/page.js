@@ -24,11 +24,11 @@ export default function ApplicationDetail() {
   const [savingInterview, setSavingInterview] = useState(false);
 
   // ─── MANUAL TOGGLES ───────────────────────────────────────────
-  const showPersonalInfo = true;
-  const showEducation = true;
-  const showApplicationDetails = true;
-  const showDocuments = true;
-  const showTestAnswers = false;
+  const showPersonalInfo = !true;
+  const showEducation = !true;
+  const showApplicationDetails = !true;
+  const showDocuments = !true;
+  const showTestAnswers = !false;
   // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -277,7 +277,7 @@ export default function ApplicationDetail() {
 
   const isRejected = Object.values(application.stageStatus || {}).includes('rejected');
   const currentStage = application.currentStage;
-  const shouldShowInterviewPicker = currentStage >= 1;
+  const shouldShowInterviewPicker = currentStage >= 1 && currentStage != 4;
 
   let rejectedStageIndex = -1;
   if (isRejected) {
