@@ -150,7 +150,7 @@ export default function AdminApplications() {
       const dataToExport = filteredApplications.length > 0 ? filteredApplications : applications;
       const emails = [];
       dataToExport.forEach((app) => {
-        if (app.email) emails.push(app.email);
+        if (app.email && app.currentStage != 4) emails.push(app.email);
       });
       if (emails.length === 0) {
         alert("No emails found to export.");
