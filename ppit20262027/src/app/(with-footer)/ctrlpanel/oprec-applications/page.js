@@ -76,6 +76,7 @@ export default function AdminApplications() {
   const [filterType, setFilterType] = useState(null);
   const [selectedDivision, setSelectedDivision] = useState("");
   const [selectedUniversity, setSelectedUniversity] = useState("");
+  const [testFilter, setTestFilter] = useState(""); // "" | "submitted" | "not_submitted"
   const [exporting, setExporting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const router = useRouter();
@@ -101,7 +102,7 @@ export default function AdminApplications() {
 
   useEffect(() => {
     applyFilters();
-  }, [applications, filterType, selectedDivision, selectedUniversity]);
+  }, [applications, filterType, selectedDivision, selectedUniversity, testFilter]);
 
   const fetchApplications = async () => {
     try {
@@ -139,6 +140,13 @@ export default function AdminApplications() {
           return filter.check(uniName);
         });
       }
+    }
+
+    // Filter by test submission
+    if (testFilter === "submitted") {
+      filtered = filtered.filter((app) => !!app.testUrl);
+    } else if (testFilter === "not_submitted") {
+      filtered = filtered.filter((app) => !app.testUrl);
     }
 
     setFilteredApplications(filtered);
@@ -353,10 +361,34 @@ export default function AdminApplications() {
                 )}
               </div>
             </div>
+
+            {/* Test Submission Filter */}
+            <div className="flex-1 min-w-[150px]">
+              <p className="text-xs text-gray-500 font-medium mb-1">Test Submission</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  value={testFilter}
+                  onChange={(e) => setTestFilter(e.target.value)}
+                  className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">All</option>
+                  <option value="submitted">✅ Submitted</option>
+                  <option value="not_submitted">⏳ Not Submitted</option>
+                </select>
+                {testFilter && (
+                  <button
+                    onClick={() => setTestFilter('')}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Active filters display */}
-          {(filterType || selectedUniversity) && (
+          {(filterType || selectedUniversity || testFilter) && (
             <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
               <span className="text-xs text-gray-500">Active filters:</span>
               {filterType && selectedDivision && (
@@ -367,6 +399,11 @@ export default function AdminApplications() {
               {selectedUniversity && (
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
                   Uni: {UNIVERSITY_FILTERS.find(f => f.value === selectedUniversity)?.label}
+                </span>
+              )}
+              {testFilter && (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs">
+                  Test: {testFilter === 'submitted' ? 'Submitted' : 'Not Submitted'}
                 </span>
               )}
             </div>
