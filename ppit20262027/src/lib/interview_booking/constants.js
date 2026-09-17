@@ -30,6 +30,7 @@ export const INTERVIEW_HOURS = {
     START: 16,
     END: 22,
     INTERVAL_MINUTES: 60,
+    EXCLUDED: [18], //6-7PM Dinner Break
 };
 
 export const HOUR_SLOTS = Array.from(
@@ -42,7 +43,7 @@ export const HOUR_SLOTS = Array.from(
             endLabel: `${String(h + 1).padStart(2, '0')}:00`,
         };
     }
-);
+).filter((slot) => !INTERVIEW_HOURS.EXCLUDED.includes(slot.hour));
 
 // ---------------------------------------------------------------------------
 // TIME WINDOW (per venue — set these when you want booking to open)
