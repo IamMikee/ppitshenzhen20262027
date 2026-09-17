@@ -1,4 +1,4 @@
-import BarcodeScanner from '../../Components/BarcodeScanner';
+import BarcodeScanner from '../../../Components/BarcodeScanner';
 import Link from "next/link";
 
 export default function ScanPage() {

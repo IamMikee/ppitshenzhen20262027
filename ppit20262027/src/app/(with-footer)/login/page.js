@@ -5,7 +5,7 @@ import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { updateUser } from "../../../services/forms";
-import OnboardingModal from "../../Components/OnboardingModal";
+import OnboardingModal from "../../../Components/OnboardingModal";
 
 export default function LoginPage() {
   const router = useRouter();

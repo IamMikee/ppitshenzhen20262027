@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createSignature } from '../../../../../../services/emailSignature';
-import SignatureEditor from '../../../../../Components/emailsignature/SignatureEditor';
+import SignatureEditor from '../../../../../../Components/emailsignature/SignatureEditor';
 
 export default function NewSignaturePage() {
     const router = useRouter();

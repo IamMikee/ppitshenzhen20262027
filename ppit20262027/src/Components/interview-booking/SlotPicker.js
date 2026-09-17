@@ -13,7 +13,6 @@ export default function SlotPicker({
     const [selectedHour, setSelectedHour] = useState('');
     const [booking, setBooking] = useState(false);
 
-    // Available hours for the selected day (with capacity)
     const hourOptions = useMemo(() => {
         return hours.map((h) => {
             const slot = slotMap[`${selectedDay}_${h.label}`];
@@ -46,20 +45,17 @@ export default function SlotPicker({
         setBooking(true);
         try {
             await onBook(selected.slot.id);
-            setSelectedHour(''); // reset after booking
+            setSelectedHour('');
         } finally {
             setBooking(false);
         }
     };
 
     return (
-        <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 space-y-6">
-            <h2 className="text-xl font-semibold">Select Your Interview Slot</h2>
-
+        <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Day dropdown */}
                 <label className="block">
-                    <span className="text-sm text-gray-400 mb-1 block">
+                    <span className="text-sm text-gray-500 mb-1 block">
                         Interview Day
                     </span>
                     <select
@@ -68,7 +64,7 @@ export default function SlotPicker({
                             setSelectedDay(e.target.value);
                             setSelectedHour('');
                         }}
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                     >
                         {days.map((d) => (
                             <option key={d.id} value={d.id}>
@@ -78,15 +74,14 @@ export default function SlotPicker({
                     </select>
                 </label>
 
-                {/* Time dropdown */}
                 <label className="block">
-                    <span className="text-sm text-gray-400 mb-1 block">
+                    <span className="text-sm text-gray-500 mb-1 block">
                         Time Slot (1 hour)
                     </span>
                     <select
                         value={selectedHour}
                         onChange={(e) => setSelectedHour(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                     >
                         <option value="">— Select a time —</option>
                         {hourOptions.map((h) => (
@@ -107,38 +102,33 @@ export default function SlotPicker({
                 </label>
             </div>
 
-            {/* Selection summary */}
             {selected && selected.exists && (
                 <div
-                    className={`rounded border p-4 text-sm ${selected.full
-                            ? 'border-red-800 bg-red-950/30'
-                            : 'border-gray-700 bg-gray-800/40'
+                    className={`rounded-lg border p-4 text-sm ${selected.full
+                            ? 'border-red-300 bg-red-50'
+                            : 'border-gray-200 bg-gray-50'
                         }`}
                 >
                     <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <span className="text-gray-400">Date: </span>
-                            {days.find((d) => d.id === selectedDay)?.label}
+                            <span className="text-gray-500">Date: </span>
+                            <span className="text-gray-800">
+                                {days.find((d) => d.id === selectedDay)?.label}
+                            </span>
                         </div>
                         <div>
-                            <span className="text-gray-400">Time: </span>
-                            {selected.label} – {selected.endLabel}
+                            <span className="text-gray-500">Time: </span>
+                            <span className="text-gray-800">
+                                {selected.label} – {selected.endLabel}
+                            </span>
                         </div>
                         <div>
-                            <span className="text-gray-400">Interviewer: </span>
-                            {selected.slot.interviewer}
-                        </div>
-                        <div>
-                            <span className="text-gray-400">Location: </span>
-                            {selected.slot.location}
-                        </div>
-                        <div>
-                            <span className="text-gray-400">Capacity: </span>
+                            <span className="text-gray-500">Capacity: </span>
                             <span
                                 className={
                                     selected.full
-                                        ? 'text-red-400'
-                                        : 'text-green-400'
+                                        ? 'text-red-600 font-medium'
+                                        : 'text-green-600 font-medium'
                                 }
                             >
                                 {selected.remaining} / {selected.max} available
@@ -148,12 +138,11 @@ export default function SlotPicker({
                 </div>
             )}
 
-            {/* Book button */}
             <div className="flex justify-end">
                 <button
                     onClick={handleConfirm}
                     disabled={!canBook}
-                    className="px-6 py-2.5 rounded bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-sm font-medium"
+                    className="px-6 py-2.5 rounded-lg font-medium text-sm bg-gradient-to-r from-red-600 to-amber-500 text-white hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {booking
                         ? 'Booking…'

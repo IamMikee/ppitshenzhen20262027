@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
-import { db } from "../../lib/firebase";
+import { db } from "../lib/firebase";
 import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import { updateUser, markAttendance } from "../../services/forms";
-import { auth } from "../../lib/firebase";
+import { updateUser, markAttendance } from "../services/forms";
+import { auth } from "../lib/firebase";
 
 export default function BarcodeScanner() {
   const videoRef = useRef(null);

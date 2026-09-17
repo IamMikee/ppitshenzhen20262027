@@ -4,8 +4,8 @@ import { useState } from 'react';
 import RecipientSelector from './RecipientSelector';
 import ContentEditor from './ContentEditor';
 import SchedulePicker from './SchedulePicker';
-import { uploadFileToCloudinary } from '../../../services/cloudinary';
-import { getActiveSignature } from '../../../services/emailSignature';
+import { uploadFileToCloudinary } from '../../services/cloudinary';
+import { getActiveSignature } from '../../services/emailSignature';
 import Link from 'next/link';
 
 export default function EmailForm({ onSuccess }) {

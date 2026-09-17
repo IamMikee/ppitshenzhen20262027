@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from "firebase/firestore";
-import Header from "../../../app/Components/Header";
-import LoadingScreen from "../../../app/Components/LoadingScreen";
+import Header from "../../../Components/Header";
+import LoadingScreen from "../../../Components/LoadingScreen";
+import InterviewStage from "@/Components/interview-booking/InterviewStage";
 
 export default function RecruitmentPage() {
     const router = useRouter();
@@ -874,6 +875,18 @@ export default function RecruitmentPage() {
                                 </p>
                             </div>
                         )}
+                        {isCompleted && (
+                            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                <p className="text-sm font-semibold text-amber-800 mb-2">
+                                    📢 Join this group ASAP to receive further information about interviews!
+                                </p>
+                                <img
+                                    src="/Applicants Group QR.webp"
+                                    alt="Applicants Group QR Code"
+                                    className="mx-auto w-48 h-48 object-contain rounded-lg"
+                                />
+                            </div>
+                        )}
                         {submissionIsLate && (
                             <div className="mt-3 p-3 bg-amber-100 rounded-lg">
                                 <p className="text-sm text-amber-700">
@@ -963,36 +976,33 @@ export default function RecruitmentPage() {
     };
 
     const renderInterview = () => {
-        const hasInterviewDetails = applicationData?.interviewDateTime && applicationData?.interviewLocation;
-
-        // currentStage = 1: Stage 1 complete, Stage 2 pending (show interview schedule or waiting)
-        // currentStage >= 2: Stage 2 complete (interview completed)
-        // currentStage >= 3: Accepted
+        // currentStage >= 2 → interview already completed
         if (currentStage >= 2) {
             return (
                 <div className="text-center py-12">
                     <div className="text-6xl mb-4">✅</div>
-                    <h3 className="text-xl font-semibold text-green-600 mb-2">Interview Completed!</h3>
+                    <h3 className="text-xl font-semibold text-green-600 mb-2">
+                        Interview Completed!
+                    </h3>
                     <p className="text-gray-600 max-w-md mx-auto">
                         You have successfully completed your interview.
                     </p>
                     <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
                         <p className="text-sm text-gray-700">
-                            🎯 We are reviewing all candidates.
-                            You will be notified once the final decision has been made.
+                            🎯 We are reviewing all candidates. You will be notified once the final decision has been made.
                         </p>
                     </div>
-                    {applicationData.interviewDateTime && (
+                    {applicationData?.interview?.scheduledAt && (
                         <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg max-w-md mx-auto">
                             <p className="text-xs text-gray-500">Interview Date:</p>
                             <p className="text-sm font-medium text-gray-700">
-                                {new Date(applicationData.interviewDateTime).toLocaleString('id-ID', {
+                                {applicationData.interview.scheduledAt.toDate().toLocaleString('id-ID', {
                                     weekday: 'long',
                                     day: 'numeric',
                                     month: 'long',
                                     year: 'numeric',
                                     hour: '2-digit',
-                                    minute: '2-digit'
+                                    minute: '2-digit',
                                 })}
                             </p>
                         </div>
@@ -1004,70 +1014,12 @@ export default function RecruitmentPage() {
             );
         }
 
-        if (!hasInterviewDetails) {
-            return (
-                <div className="text-center py-12">
-                    <div className="text-6xl mb-4">⏳</div>
-                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Waiting for Interview Schedule</h3>
-                    <p className="text-gray-500 max-w-md mx-auto">
-                        Your interview time and place are being finalized.
-                        Please check back here for updates.
-                    </p>
-                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-md mx-auto">
-                        <p className="text-sm text-gray-600">
-                            📌 You will receive a notification once your interview schedule is confirmed.
-                        </p>
-                    </div>
-                </div>
-            );
-        }
-
+        // currentStage === 1 → stage 2 is active → show the booking system
         return (
-            <div className="space-y-6">
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-                    <div className="flex items-start gap-3 mb-4">
-                        <span className="text-3xl">🎯</span>
-                        <div>
-                            <h4 className="font-semibold text-purple-800 text-lg">Your Interview Schedule</h4>
-                            <p className="text-sm text-gray-600 mt-1">Please be punctual for your interview session</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3 mt-4">
-                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-100">
-                            <span className="text-xl">🕐</span>
-                            <div>
-                                <p className="text-xs text-gray-500 font-medium">Interview Time</p>
-                                <p className="text-gray-800 font-semibold">
-                                    {new Date(applicationData.interviewDateTime).toLocaleString('id-ID', {
-                                        weekday: 'long',
-                                        day: 'numeric',
-                                        month: 'long',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    })}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-100">
-                            <span className="text-xl">📍</span>
-                            <div>
-                                <p className="text-xs text-gray-500 font-medium">Interview Location</p>
-                                <p className="text-gray-800 font-semibold">{applicationData.interviewLocation}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button
-                    onClick={() => window.location.href = `mailto:recruitment@ppitsz.com`}
-                    className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
-                >
-                    📧 Need Help? Contact Us
-                </button>
-            </div>
+            <InterviewStage
+                user={user}
+                applicationData={applicationData}
+            />
         );
     };
 

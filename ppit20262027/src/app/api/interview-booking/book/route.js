@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { bookTimeSlotAdmin } from '@/lib/interview_booking/booking-service';
+import { getVenueForApplicant, getInterviewWindowState } from '@/lib/interview_booking/constants';
 
-// --- Firebase Admin init (server-only, runs once) ---
 if (!getApps().length) {
     initializeApp({
         credential: cert({
@@ -16,30 +17,53 @@ if (!getApps().length) {
 
 export async function POST(req) {
     try {
-        // 1. Verify the user is signed in
         const authHeader = req.headers.get('authorization');
         if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const idToken = authHeader.split('Bearer ')[1];
         const decoded = await getAuth().verifyIdToken(idToken);
 
-        // 2. Read the request body
-        const body = await req.json();
-        const { slotId, notes } = body;
-
+        const { slotId, notes } = await req.json();
         if (!slotId) {
+            return NextResponse.json({ error: 'Missing slotId' }, { status: 400 });
+        }
+
+        const db = getFirestore();
+        const appSnap = await db
+            .collection('applications')
+            .doc(decoded.uid)
+            .get();
+
+        if (!appSnap.exists) {
             return NextResponse.json(
-                { error: 'Missing slotId' },
-                { status: 400 }
+                { error: 'No application found for this user' },
+                { status: 403 }
             );
         }
 
-        // 3. Book the slot (Admin SDK atomic transaction — bypasses rules)
+        const applicationData = appSnap.data();
+        const userVenueId = getVenueForApplicant(applicationData);
+        const win = getInterviewWindowState(userVenueId);
+
+        // slotId format: `${venueId}_${dayId}_${hour}00`
+        const slotVenueId = slotId.split('_')[0];
+
+        if (slotVenueId !== userVenueId) {
+            return NextResponse.json(
+                { error: 'This slot is not available for your venue' },
+                { status: 403 }
+            );
+        }
+
+        if (win.state !== 'open') {
+            return NextResponse.json(
+                { error: 'Interview scheduling is not currently open for your venue' },
+                { status: 403 }
+            );
+        }
+
         const result = await bookTimeSlotAdmin({
             slotId,
             userId: decoded.uid,
@@ -51,7 +75,6 @@ export async function POST(req) {
         if (!result.success) {
             return NextResponse.json(result, { status: 400 });
         }
-
         return NextResponse.json(result);
     } catch (err) {
         console.error('[book route]', err);

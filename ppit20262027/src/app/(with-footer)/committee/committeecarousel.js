@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import Header from "../../Components/Header";
+import Header from "../../../Components/Header";
 
 export default function CommitteeCarousel({ input }) {
 	const [menuOpen, setMenuOpen] = useState(false); // Track the state of the menu

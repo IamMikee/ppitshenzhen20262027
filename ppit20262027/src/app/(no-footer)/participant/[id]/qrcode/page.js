@@ -1,4 +1,4 @@
-import ParticipantQRCode from '../../../../Components/ParticipantQRCode';
+import ParticipantQRCode from '../../../../../Components/ParticipantQRCode';
 
 export default function ParticipantQRCodePage({ params }) {
   const { id: participantId } = params;

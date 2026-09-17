@@ -1,21 +1,37 @@
 export const BOOKING_CONFIG = {
     DEFAULT_MAX_BOOKINGS: 4,
-    PARENT_DOC_ID: 'sept-2025',   // interviewTimeSlot/sept-2025
+    PARENT_DOC_ID: 'sept-2026',
 };
 
-// Fixed interview schedule
-export const INTERVIEW_DAYS = [
-    { id: '2025-09-19', label: 'Friday, 19 September 2025' },
-    { id: '2025-09-20', label: 'Saturday, 20 September 2025' },
+// ---------------------------------------------------------------------------
+// VENUES
+// ---------------------------------------------------------------------------
+export const VENUES = [
+    {
+        id: 'cuhksz',
+        label: 'CUHK-Shenzhen',
+        days: [
+            { id: '2026-09-21', label: 'Monday, 21 September 2026' },
+            { id: '2026-09-22', label: 'Tuesday, 22 September 2026' },
+        ],
+    },
+    {
+        id: 'utown',
+        label: 'HITSZ H Main Building Complex, H507',
+        days: [
+            { id: '2026-09-19', label: 'Saturday, 19 September 2026' },
+            { id: '2026-09-20', label: 'Sunday, 20 September 2026' },
+        ],
+    },
 ];
 
+// Shared hour grid for all venues: 16:00 – 22:00
 export const INTERVIEW_HOURS = {
-    START: 9,   // 9 AM
-    END: 17,    // 5 PM
+    START: 16,
+    END: 22,
     INTERVAL_MINUTES: 60,
 };
 
-// Pre-generated hour labels (09:00 – 16:00, 8 slots/day)
 export const HOUR_SLOTS = Array.from(
     { length: INTERVIEW_HOURS.END - INTERVIEW_HOURS.START },
     (_, i) => {
@@ -28,6 +44,37 @@ export const HOUR_SLOTS = Array.from(
     }
 );
 
+// ---------------------------------------------------------------------------
+// TIME WINDOW (per venue — set these when you want booking to open)
+// ---------------------------------------------------------------------------
+export const INTERVIEW_WINDOWS = {
+    cuhksz: {
+        open: '2026-09-17T10:00:00+08:00',
+        close: '2026-09-19T16:00:00+08:00',
+    },
+    utown: {
+        open: '2026-09-18T10:00:00+08:00',
+        close: '2026-09-18T16:00:00+08:00',
+    },
+};
+
+export function getInterviewWindowState(venueId, now = new Date()) {
+    const w = INTERVIEW_WINDOWS[venueId];
+    if (!w) return { state: 'unknown' };
+    const open = new Date(w.open);
+    const close = new Date(w.close);
+    if (now < open) return { state: 'not-open', opensAt: open, closesAt: close };
+    if (now > close) return { state: 'closed', opensAt: open, closesAt: close };
+    return { state: 'open', opensAt: open, closesAt: close };
+}
+
+export function getVenue(venueId) {
+    return VENUES.find((v) => v.id === venueId) || null;
+}
+
+// ---------------------------------------------------------------------------
+// COLLECTIONS
+// ---------------------------------------------------------------------------
 export const COLLECTIONS = {
     PARENT: 'interviewTimeSlot',
     TIME_SLOTS: 'timeSlots',
@@ -35,6 +82,26 @@ export const COLLECTIONS = {
     APPLICATIONS: 'applications',
 };
 
-// Deterministic slot ID so the seed and lookups always match
-export const buildSlotId = (dayId, hour) =>
-    `${dayId.replace(/-/g, '')}_${String(hour).padStart(2, '0')}00`;
+// Deterministic slot id: e.g. utown_20260919_1600
+export const buildSlotId = (venueId, dayId, hour) =>
+    `${venueId}_${dayId.replace(/-/g, '')}_${String(hour).padStart(2, '0')}00`;
+
+// ---------------------------------------------------------------------------
+// VENUE ROUTING
+// ---------------------------------------------------------------------------
+// CUHKSZ students are identified by their university string.
+// Everything else defaults to UTOWN.
+function isCuhksz(universityName) {
+    if (!universityName) return false;
+    const lower = universityName.toLowerCase();
+    return (
+        /^(the|c)/.test(lower) ||
+        /chinese/.test(lower) ||
+        /cuhk/.test(lower)
+    );
+}
+
+export function getVenueForApplicant(applicationData) {
+    const uni = applicationData?.university || '';
+    return isCuhksz(uni) ? 'cuhksz' : 'utown';
+}

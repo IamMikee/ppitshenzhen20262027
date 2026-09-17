@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import EmailForm from '../../../Components/emailsender/EmailForm';
-import EmailList from '../../../Components/emailsender/EmailList';
+import EmailForm from '../../../../Components/emailsender/EmailForm';
+import EmailList from '../../../../Components/emailsender/EmailList';
 
 export default function EmailSenderPage() {
   const [emails, setEmails] = useState([]);
