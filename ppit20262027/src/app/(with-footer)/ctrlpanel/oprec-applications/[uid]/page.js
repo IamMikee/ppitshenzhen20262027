@@ -24,11 +24,11 @@ export default function ApplicationDetail() {
   const [savingInterview, setSavingInterview] = useState(false);
 
   // ─── MANUAL TOGGLES ───────────────────────────────────────────
-  const showPersonalInfo = !true;
-  const showEducation = !true;
-  const showApplicationDetails = !true;
-  const showDocuments = !true;
-  const showTestAnswers = !false;
+  const showPersonalInfo = true;
+  const showEducation = true;
+  const showApplicationDetails = true;
+  const showDocuments = true;
+  const showTestAnswers = true;
   // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {

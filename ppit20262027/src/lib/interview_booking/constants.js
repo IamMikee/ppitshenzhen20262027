@@ -9,7 +9,7 @@ export const BOOKING_CONFIG = {
 export const VENUES = [
     {
         id: 'cuhksz',
-        label: 'CUHK-Shenzhen',
+        label: 'CUHK-Shenzhen, Research Complex 105 (RX105)',
         days: [
             { id: '2026-09-21', label: 'Monday, 21 September 2026' },
             { id: '2026-09-22', label: 'Tuesday, 22 September 2026' },
@@ -50,12 +50,12 @@ export const HOUR_SLOTS = Array.from(
 // ---------------------------------------------------------------------------
 export const INTERVIEW_WINDOWS = {
     cuhksz: {
-        open: '2026-09-17T10:00:00+08:00',
-        close: '2026-09-19T16:00:00+08:00',
+        open: '2026-09-17T14:00:00+08:00',
+        close: '2026-09-19T17:00:00+08:00',
     },
     utown: {
-        open: '2026-09-18T10:00:00+08:00',
-        close: '2026-09-18T16:00:00+08:00',
+        open: '2026-09-18T14:00:00+08:00',
+        close: '2026-09-18T17:00:00+08:00',
     },
 };
 

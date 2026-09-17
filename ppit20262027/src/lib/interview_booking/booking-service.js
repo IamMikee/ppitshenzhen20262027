@@ -81,16 +81,14 @@ export async function bookTimeSlotAdmin(
 
             const interviewData = {
                 slotId,
+                venueId: slot.venueId,
+                venueLabel: slot.venueLabel,
                 dayId: slot.dayId,
                 dayLabel: slot.dayLabel,
                 hourLabel: slot.hourLabel,
                 endLabel: slot.endLabel,
                 bookingId: bookingRef.id,
                 scheduledAt: slot.startTime,
-                interviewer: slot.interviewer,
-                interviewerEmail: slot.interviewerEmail,
-                location: slot.location,
-                meetingLink: slot.meetingLink || null,
                 status: 'scheduled',
                 updatedAt: Timestamp.now(),
             };

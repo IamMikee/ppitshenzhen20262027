@@ -1,7 +1,14 @@
 'use client';
 
+import { VENUES } from '@/lib/interview_booking/constants';
+
 export default function BookingDetails({ interview }) {
     if (!interview) return null;
+
+    const venueLabel =
+        VENUES.find((v) => v.id === interview.venueId)?.label ||
+        interview.venueLabel ||
+        '—';
 
     const scheduled = interview.scheduledAt?.toDate?.();
     const dateStr = scheduled
@@ -45,6 +52,14 @@ export default function BookingDetails({ interview }) {
                     <div>
                         <p className="text-xs text-gray-500 font-medium">Time</p>
                         <p className="text-gray-800 font-semibold">{timeStr}</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-100">
+                    <span className="text-xl">📍</span>
+                    <div>
+                        <p className="text-xs text-gray-500 font-medium">Location</p>
+                        <p className="text-gray-800 font-semibold">{venueLabel}</p>
                     </div>
                 </div>
             </div>

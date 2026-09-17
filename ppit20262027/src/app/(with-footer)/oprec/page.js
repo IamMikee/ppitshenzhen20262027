@@ -96,18 +96,18 @@ export default function RecruitmentPage() {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 setUser(u);
-
                 try {
-                    // Fetch user data from users collection
                     const userRef = doc(db, "users", u.uid);
                     const userSnap = await getDoc(userRef);
-
                     if (userSnap.exists()) {
                         const userData = userSnap.data();
-                        const name = userData.name || userData.displayName || u.displayName || u.email?.split('@')[0] || "Applicant";
+                        const name =
+                            userData.name ||
+                            userData.displayName ||
+                            u.displayName ||
+                            u.email?.split('@')[0] ||
+                            "Applicant";
                         setUserName(name);
-
-                        // Pre-fill form with user data
                         setFormData(prev => ({
                             ...prev,
                             email: u.email || "",
@@ -115,48 +115,19 @@ export default function RecruitmentPage() {
                             fullName: userData.name || "",
                         }));
                     }
-
-                    // Check if application already exists
-                    const appRef = doc(db, "applications", u.uid);
-                    const appSnap = await getDoc(appRef);
-
-                    if (appSnap.exists()) {
-                        const appData = appSnap.data();
-                        setApplicationData(appData);
-                        const stage = appData.currentStage || 0;
-                        setCurrentStage(stage);
-                        setActiveStage(stage > 3 ? 0 : stage);
-                        setFormSubmitted(true);
-
-                        // Check if rejected (currentStage === 4)
-                        if (stage === 4) {
-                            setIsRejected(true);
-                            setRejectedStage(appData.rejectedAtStage || 0);
-                        } else {
-                            setIsRejected(false);
-                        }
-                    } else {
-                        // No application yet - set initial state
-                        setCurrentStage(0);
-                        setActiveStage(0);
-                        setFormSubmitted(false);
-                        setIsRejected(false);
-                    }
                 } catch (error) {
-                    console.error("Error fetching data:", error);
+                    console.error("Error fetching user:", error);
                 }
-
                 setLoading(false);
             } else {
                 setUser(null);
                 setLoading(false);
             }
         });
-
         return () => unsub();
     }, []);
 
-    // Check if user has an application in Firestore
+    // Check if user has an application/interview time in Firestore
     useEffect(() => {
         if (!user) {
             setHasApplication(false);
@@ -164,17 +135,37 @@ export default function RecruitmentPage() {
             return;
         }
 
-        setCheckingApplication(true);
-        const appDocRef = doc(db, "applications", user.uid);
+        const appRef = doc(db, "applications", user.uid);
         const unsub = onSnapshot(
-            appDocRef,
-            (docSnap) => {
-                setHasApplication(docSnap.exists());
+            appRef,
+            (appSnap) => {
+                const exists = appSnap.exists();
+                setHasApplication(exists);
                 setCheckingApplication(false);
+
+                if (exists) {
+                    const appData = appSnap.data();
+                    setApplicationData(appData);
+                    const stage = appData.currentStage || 0;
+                    setCurrentStage(stage);
+                    setActiveStage(stage > 3 ? 0 : stage);
+                    setFormSubmitted(true);
+
+                    if (stage === 4) {
+                        setIsRejected(true);
+                        setRejectedStage(appData.rejectedAtStage || 0);
+                    } else {
+                        setIsRejected(false);
+                    }
+                } else {
+                    setCurrentStage(0);
+                    setActiveStage(0);
+                    setFormSubmitted(false);
+                    setIsRejected(false);
+                }
             },
             (error) => {
-                console.error("Error checking application:", error);
-                setHasApplication(false);
+                console.error("application snapshot error:", error);
                 setCheckingApplication(false);
             }
         );

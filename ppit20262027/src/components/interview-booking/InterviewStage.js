@@ -201,7 +201,7 @@ function InterviewBookingPicker({ user, venue, applicationData }) {
             </div>
 
             {message && (
-                <div className="p-3 rounded bg-gray-50 border border-gray-200 text-sm">
+                <div className="p-3 rounded bg-gray-50 border border-gray-200 text-sm text-gray-600">
                     {message}
                 </div>
             )}

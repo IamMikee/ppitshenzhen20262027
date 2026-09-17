@@ -43,7 +43,6 @@ const universityChecks = {
   },
   shenda: (name) => {
     const lower = name.toLowerCase();
-    // Exclude everything else first
     if (/^(the|t|c)/.test(lower) || /chinese/.test(lower) || /cuhk/.test(lower)) return false;
     if (/^h/.test(lower) || /hitsz/.test(lower) || /harbin/.test(lower)) return false;
     if (/sustech/.test(lower) || /southern/.test(lower)) return false;
@@ -67,6 +66,21 @@ const UNIVERSITY_FILTERS = [
   },
 ];
 
+// ─── INTERVIEW SLOT CONFIG ──────────────────────────────────
+const INTERVIEW_DAYS = [
+  { venueId: 'utown', venueLabel: 'UTOWN', dayId: '2026-09-19', dayLabel: 'Sat, 19 Sep 2026' },
+  { venueId: 'utown', venueLabel: 'UTOWN', dayId: '2026-09-20', dayLabel: 'Sun, 20 Sep 2026' },
+  { venueId: 'cuhksz', venueLabel: 'CUHKSZ', dayId: '2026-09-21', dayLabel: 'Mon, 21 Sep 2026' },
+  { venueId: 'cuhksz', venueLabel: 'CUHKSZ', dayId: '2026-09-22', dayLabel: 'Tue, 22 Sep 2026' },
+];
+
+const INTERVIEW_HOURS = [16, 17, 19, 20, 21];
+
+const buildSlotId = (venueId, dayId, hour) =>
+  `${venueId}_${dayId.replace(/-/g, "")}_${String(hour).padStart(2, "0")}00`;
+
+const formatHour = (h) => `${String(h).padStart(2, "0")}:00`;
+
 export default function AdminApplications() {
   const [applications, setApplications] = useState([]);
   const [filteredApplications, setFilteredApplications] = useState([]);
@@ -76,7 +90,9 @@ export default function AdminApplications() {
   const [filterType, setFilterType] = useState(null);
   const [selectedDivision, setSelectedDivision] = useState("");
   const [selectedUniversity, setSelectedUniversity] = useState("");
-  const [testFilter, setTestFilter] = useState(""); // "" | "submitted" | "not_submitted"
+  const [testFilter, setTestFilter] = useState("");
+  const [interviewDayKey, setInterviewDayKey] = useState("");
+  const [interviewHour, setInterviewHour] = useState("");
   const [exporting, setExporting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const router = useRouter();
@@ -102,7 +118,7 @@ export default function AdminApplications() {
 
   useEffect(() => {
     applyFilters();
-  }, [applications, filterType, selectedDivision, selectedUniversity, testFilter]);
+  }, [applications, filterType, selectedDivision, selectedUniversity, testFilter, interviewDayKey, interviewHour]);
 
   const fetchApplications = async () => {
     try {
@@ -149,6 +165,31 @@ export default function AdminApplications() {
       filtered = filtered.filter((app) => !app.testUrl);
     }
 
+    // Filter by interview slot
+    if (interviewHour) {
+      if (interviewHour === "none") {
+        filtered = filtered.filter((app) => !app.interview?.slotId);
+      } else if (interviewHour === "any" && interviewDayKey) {
+        const [venueId, dayId] = interviewDayKey.split("|");
+        const dayPrefix = `${venueId}_${dayId.replace(/-/g, "")}_`;
+        filtered = filtered.filter((app) => {
+          const slotId = app.interview?.slotId;
+          return slotId && slotId.startsWith(dayPrefix);
+        });
+      } else if (interviewDayKey && interviewHour !== "any") {
+        const [venueId, dayId] = interviewDayKey.split("|");
+        const targetSlot = buildSlotId(venueId, dayId, Number(interviewHour));
+        filtered = filtered.filter((app) => app.interview?.slotId === targetSlot);
+      }
+    } else if (interviewDayKey) {
+      const [venueId, dayId] = interviewDayKey.split("|");
+      const dayPrefix = `${venueId}_${dayId.replace(/-/g, "")}_`;
+      filtered = filtered.filter((app) => {
+        const slotId = app.interview?.slotId;
+        return slotId && slotId.startsWith(dayPrefix);
+      });
+    }
+
     setFilteredApplications(filtered);
   };
 
@@ -184,7 +225,6 @@ export default function AdminApplications() {
     }
   };
 
-  // ─── PUSH ALL CHANGES ──────────────────────────────────────
   const pushAllChanges = async () => {
     const confirmed = window.confirm(
       `⚠️ PUSH ALL CHANGES\n\nThis will apply ALL pending stage changes to ALL applicants.\n\n• Applicants with 'rejected' in stageStatus → currentStage = 4\n• Applicants with stage 3 'completed' → currentStage = 3\n• Applicants with stage 2 'completed' → currentStage = 2\n• Applicants with stage 1 'completed' → currentStage = 1\n• All others remain at currentStage 0\n\nThis action CANNOT be undone. Are you sure?`
@@ -214,7 +254,7 @@ export default function AdminApplications() {
         }
 
         if (app.currentStage !== newStage) {
-          const appRef = doc(db, "applications", app.uid);
+          const appRef = doc(db, "applications", app.id);
           batch.update(appRef, {
             currentStage: newStage,
             updatedAt: new Date().toISOString()
@@ -385,10 +425,76 @@ export default function AdminApplications() {
                 )}
               </div>
             </div>
+
+            {/* Interview Slot Filter */}
+            <div className="flex-1 min-w-[220px]">
+              <p className="text-xs text-gray-500 font-medium mb-1">Interview Slot</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  value={interviewDayKey}
+                  onChange={(e) => {
+                    setInterviewDayKey(e.target.value);
+                    setInterviewHour("");
+                  }}
+                  className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">All Days</option>
+                  {INTERVIEW_DAYS.map((d) => (
+                    <option key={`${d.venueId}|${d.dayId}`} value={`${d.venueId}|${d.dayId}`}>
+                      {d.venueLabel} · {d.dayLabel}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={interviewHour}
+                  onChange={(e) => setInterviewHour(e.target.value)}
+                  disabled={!interviewDayKey}
+                  className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">
+                    {interviewDayKey ? "All Hours" : "Pick a day first"}
+                  </option>
+                  <option value="any">Any Hour</option>
+                  {INTERVIEW_HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {formatHour(h)} – {formatHour(h + 1)}
+                    </option>
+                  ))}
+                </select>
+
+                {(interviewDayKey || interviewHour) && (
+                  <button
+                    onClick={() => {
+                      setInterviewDayKey("");
+                      setInterviewHour("");
+                    }}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => {
+                    setInterviewDayKey("");
+                    setInterviewHour("none");
+                  }}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${interviewHour === "none"
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                >
+                  Not Booked
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Active filters display */}
-          {(filterType || selectedUniversity || testFilter) && (
+          {(filterType || selectedUniversity || testFilter || interviewDayKey || interviewHour) && (
             <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
               <span className="text-xs text-gray-500">Active filters:</span>
               {filterType && selectedDivision && (
@@ -406,6 +512,26 @@ export default function AdminApplications() {
                   Test: {testFilter === 'submitted' ? 'Submitted' : 'Not Submitted'}
                 </span>
               )}
+              {interviewHour === "none" && (
+                <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-full text-xs">
+                  Interview: Not Booked
+                </span>
+              )}
+              {interviewDayKey && interviewHour && interviewHour !== "none" && (
+                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">
+                  Interview: {INTERVIEW_DAYS.find(d => `${d.venueId}|${d.dayId}` === interviewDayKey)?.venueLabel}
+                  {' · '}
+                  {INTERVIEW_DAYS.find(d => `${d.venueId}|${d.dayId}` === interviewDayKey)?.dayLabel}
+                  {interviewHour !== "any" && ` · ${formatHour(Number(interviewHour))}`}
+                </span>
+              )}
+              {interviewDayKey && !interviewHour && (
+                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">
+                  Interview: {INTERVIEW_DAYS.find(d => `${d.venueId}|${d.dayId}` === interviewDayKey)?.venueLabel}
+                  {' · '}
+                  {INTERVIEW_DAYS.find(d => `${d.venueId}|${d.dayId}` === interviewDayKey)?.dayLabel}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -416,22 +542,23 @@ export default function AdminApplications() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-red-50 to-amber-50">
                 <tr>
-                  {/* <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th> */}
+                  <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="min-w-[180px] max-w-[200px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applicant ID</th>
-                  {/* <th className="min-w-[180px] max-w-[220px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th> */}
+                  <th className="min-w-[180px] max-w-[220px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Second Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stage</th>
+                  <th className="min-w-[160px] max-w-[180px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Interview</th>
                   <th className="min-w-[200px] max-w-[240px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="min-w-[100px] max-w-[120px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredApplications.map((app) => (
-                  <tr key={app.uid} className="hover:bg-gray-50 transition-colors">
-                    {/* <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td> */}
+                  <tr key={app.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.name || "-"}</td>
                     <td className="min-w-[180px] max-w-[200px] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate">{app.candidateId || "-"}</td>
-                    {/* <td className="min-w-[180px] max-w-[220px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.university || "-"}</td> */}
+                    <td className="min-w-[180px] max-w-[220px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.university || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.firstChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">{app.secondChoice || "-"}</td>
                     <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap">
@@ -444,6 +571,17 @@ export default function AdminApplications() {
                         {STAGES.find(s => s.index === app.currentStage)?.label || `Stage ${app.currentStage + 1}`}
                       </span>
                     </td>
+                    <td className="min-w-[160px] max-w-[180px] px-6 py-4 whitespace-nowrap text-sm">
+                      {app.interview?.slotId ? (
+                        <span className="text-purple-700 font-medium">
+                          {app.interview.dayLabel?.split(",")[0] || app.interview.dayId}
+                          {' · '}
+                          {app.interview.hourLabel}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 italic">Not booked</span>
+                      )}
+                    </td>
                     <td className="min-w-[200px] max-w-[240px] px-6 py-4 whitespace-nowrap">
                       <div className="flex gap-1 flex-wrap items-center">
                         {Object.entries(app.stageStatus || {}).map(([key, value]) => (
@@ -452,7 +590,7 @@ export default function AdminApplications() {
                       </div>
                     </td>
                     <td className="min-w-[100px] max-w-[120px] px-6 py-4 whitespace-nowrap text-sm">
-                      <Link href={`/ctrlpanel/oprec-applications/${app.uid}`} className="text-red-600 hover:text-red-800 font-medium whitespace-nowrap">
+                      <Link href={`/ctrlpanel/oprec-applications/${app.id}`} className="text-red-600 hover:text-red-800 font-medium whitespace-nowrap">
                         View Details
                       </Link>
                     </td>
