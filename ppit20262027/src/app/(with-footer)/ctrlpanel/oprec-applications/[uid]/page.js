@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { auth, db } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, Timestamp, deleteField } from "firebase/firestore";
 import Link from "next/link";
+import { VENUES, getVenueForApplicant } from "@/lib/interview_booking/constants";
 
 export default function ApplicationDetail() {
   const router = useRouter();
@@ -17,10 +18,11 @@ export default function ApplicationDetail() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [updating, setUpdating] = useState(false);
 
-  // Interview time picker state
-  const [interviewDate, setInterviewDate] = useState("");
-  const [interviewTime, setInterviewTime] = useState("");
-  const [interviewLocation, setInterviewLocation] = useState("");
+  // Interview edit state
+  const [editingInterview, setEditingInterview] = useState(false);
+  const [editDate, setEditDate] = useState("");     // "YYYY-MM-DD"
+  const [editHour, setEditHour] = useState("");     // "HH:MM"
+  const [editLocation, setEditLocation] = useState("");
   const [savingInterview, setSavingInterview] = useState(false);
 
   // ─── MANUAL TOGGLES ───────────────────────────────────────────
@@ -58,13 +60,11 @@ export default function ApplicationDetail() {
         const data = { id: appSnap.id, ...appSnap.data() };
         setApplication(data);
 
-        if (data.interviewDateTime) {
-          const dateObj = new Date(data.interviewDateTime);
-          setInterviewDate(dateObj.toISOString().split('T')[0]);
-          setInterviewTime(dateObj.toTimeString().slice(0, 5));
-        }
-        if (data.interviewLocation) {
-          setInterviewLocation(data.interviewLocation);
+        // Prefill the edit form from the current interview object
+        if (data.interview) {
+          setEditDate(data.interview.dayId || "");
+          setEditHour(data.interview.hourLabel || "");
+          setEditLocation(data.interview.location || "");
         }
       } else {
         setApplication(null);
@@ -76,28 +76,84 @@ export default function ApplicationDetail() {
     }
   };
 
-  const saveInterviewSchedule = async () => {
-    if (!interviewDate || !interviewTime || !interviewLocation) {
-      alert("Please fill in all fields: Date, Time, and Location");
+  // ─── MANUAL INTERVIEW OVERRIDE (ADMIN) ─────────────────────
+  const saveInterviewOverride = async () => {
+    if (!editDate || !editHour) {
+      alert("Please fill in both date and time.");
       return;
     }
 
     setSavingInterview(true);
     try {
-      const appRef = doc(db, "applications", uid);
-      const dateTime = new Date(`${interviewDate}T${interviewTime}:00`);
+      const [hh, mm] = editHour.split(":").map(Number);
+      const [yyyy, mo, dd] = editDate.split("-").map(Number);
+      const scheduled = new Date(yyyy, mo - 1, dd, hh, mm || 0, 0, 0);
 
+      const endHour = (hh + 1) % 24;
+      const endLabel = `${String(endHour).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")}`;
+
+      const venueId = getVenueForApplicant(application);
+      const venue = VENUES.find((v) => v.id === venueId);
+
+      const existing = application.interview || {};
+      const updatedInterview = {
+        ...existing,
+
+        dayId: editDate,
+        hourLabel: editHour,
+        endLabel,
+        scheduledAt: Timestamp.fromDate(scheduled),
+
+        venueId: venue?.id || existing.venueId || null,
+        venueLabel: venue?.label || existing.venueLabel || null,
+
+        location: editLocation || existing.location || venue?.label || "",
+
+        status: existing.status || "scheduled",
+
+        manuallyEdited: true,
+        manuallyEditedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+
+      const appRef = doc(db, "applications", uid);
       await updateDoc(appRef, {
-        interviewDateTime: dateTime.toISOString(),
-        interviewLocation: interviewLocation,
-        updatedAt: new Date().toISOString()
+        interview: updatedInterview,
+        updatedAt: new Date().toISOString(),
       });
 
       await fetchApplication();
-      alert("✅ Interview schedule saved successfully!");
+      setEditingInterview(false);
+      alert("✅ Interview schedule updated.");
     } catch (error) {
-      console.error("Error saving interview schedule:", error);
-      alert("Failed to save interview schedule. Please try again.");
+      console.error("Error saving interview override:", error);
+      alert("Failed to save. Please try again.");
+    } finally {
+      setSavingInterview(false);
+    }
+  };
+
+  const clearInterview = async () => {
+    const confirmed = window.confirm(
+      `Clear the interview schedule for ${application.name}?\n\nThis removes the "interview" field entirely. The applicant will be able to book again (if the window is open).`
+    );
+    if (!confirmed) return;
+
+    setSavingInterview(true);
+    try {
+      const appRef = doc(db, "applications", uid);
+      await updateDoc(appRef, {
+        interview: deleteField(),
+        updatedAt: new Date().toISOString(),
+      });
+      await fetchApplication();
+      setEditDate("");
+      setEditHour("");
+      setEditLocation("");
+      alert("✅ Interview cleared.");
+    } catch (error) {
+      console.error("Error clearing interview:", error);
+      alert("Failed to clear. Please try again.");
     } finally {
       setSavingInterview(false);
     }
@@ -129,15 +185,12 @@ export default function ApplicationDetail() {
       const appRef = doc(db, "applications", uid);
       const updatedStageStatus = { ...application.stageStatus };
 
-      // Mark the current stage as completed
       updatedStageStatus[stageIndex] = 'completed';
 
-      // Set the next stage to pending (if it exists and is not rejected)
       if (stageIndex + 1 < 4 && updatedStageStatus[stageIndex + 1] !== 'rejected') {
         updatedStageStatus[stageIndex + 1] = 'pending';
       }
 
-      // Lock all future stages beyond the next one
       for (let i = stageIndex + 2; i < 4; i++) {
         if (updatedStageStatus[i] !== 'rejected') {
           updatedStageStatus[i] = 'locked';
@@ -277,7 +330,6 @@ export default function ApplicationDetail() {
 
   const isRejected = Object.values(application.stageStatus || {}).includes('rejected');
   const currentStage = application.currentStage;
-  const shouldShowInterviewPicker = currentStage >= 1 && currentStage != 4;
 
   let rejectedStageIndex = -1;
   if (isRejected) {
@@ -288,6 +340,13 @@ export default function ApplicationDetail() {
       }
     }
   }
+
+  // Interview display helpers
+  const interview = application.interview || null;
+  const venueLabel =
+    VENUES.find((v) => v.id === interview?.venueId)?.label ||
+    interview?.venueLabel ||
+    "—";
 
   return (
     <div className="min-h-screen bg-gray-100 py-12 px-4 md:px-8">
@@ -539,91 +598,176 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Interview Time Picker */}
-        {shouldShowInterviewPicker && (
+        {/* Interview Schedule (shown once they've passed the written test) */}
+        {currentStage >= 1 && currentStage !== 4 && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-            <div className="px-6 py-4 bg-gray-50 border-b">
+            <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
               <h2 className="text-lg font-semibold font-montserrat text-gray-800">
                 🗓️ Interview Schedule
               </h2>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                  <p className="text-xs text-gray-600">Applicant's University:</p>
-                  <p className="text-sm font-semibold text-gray-800">{application.university || "Not provided"}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Interview Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={interviewDate}
-                    onChange={(e) => setInterviewDate(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Interview Time <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={interviewTime}
-                    onChange={(e) => setInterviewTime(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Interview Location <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={interviewLocation}
-                    onChange={(e) => setInterviewLocation(e.target.value)}
-                    placeholder="e.g., CUHK-Shenzhen Conference Complex I Room 701"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-
-                {application.interviewDateTime && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-xs text-gray-600">Currently saved:</p>
-                    <p className="text-sm font-medium text-gray-800">
-                      {new Date(application.interviewDateTime).toLocaleString('id-ID', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                    <p className="text-sm text-gray-700">{application.interviewLocation}</p>
-                  </div>
-                )}
-
+              {!editingInterview && (
                 <button
-                  onClick={saveInterviewSchedule}
-                  disabled={savingInterview}
-                  className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    setEditDate(interview?.dayId || "");
+                    setEditHour(interview?.hourLabel || "");
+                    setEditLocation(interview?.location || "");
+                    setEditingInterview(true);
+                  }}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
                 >
-                  {savingInterview ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
-                      Saving...
-                    </span>
-                  ) : (
-                    "Save Interview Schedule"
-                  )}
+                  ✏️ Edit
                 </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <p className="text-xs text-gray-600">Applicant's University:</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {application.university || "Not provided"}
+                </p>
               </div>
+
+              {/* Current booking */}
+              {interview && (interview.slotId || interview.scheduledAt) ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-600 font-medium">Current Booking</p>
+                    {interview.status && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                        {interview.status}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Date &amp; Time</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {interview.scheduledAt?.toDate
+                        ? interview.scheduledAt.toDate().toLocaleString('id-ID', {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                        : interview.dayId
+                          ? `${interview.dayId} · ${interview.hourLabel || ""}`
+                          : "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Location</p>
+                    <p className="text-sm text-gray-800">
+                      {interview.location || venueLabel}
+                    </p>
+                  </div>
+
+                  {interview.slotId && (
+                    <div>
+                      <p className="text-xs text-gray-500">Slot ID</p>
+                      <p className="text-xs font-mono text-gray-600">{interview.slotId}</p>
+                    </div>
+                  )}
+
+                  {interview.manuallyEdited && (
+                    <p className="text-xs text-amber-700 italic">
+                      ⚠️ Manually edited by admin
+                      {interview.manuallyEditedAt?.toDate
+                        ? ` on ${interview.manuallyEditedAt.toDate().toLocaleString('id-ID')}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-gray-500 italic">No interview booked yet</p>
+                </div>
+              )}
+
+              {/* Edit panel */}
+              {editingInterview && (
+                <div className="border-t border-gray-200 pt-4 space-y-4">
+                  <p className="text-sm font-semibold text-gray-700">Manual Override</p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Time <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={editHour}
+                      onChange={(e) => setEditHour(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Slot end time is auto-computed as +1 hour.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Location (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editLocation}
+                      onChange={(e) => setEditLocation(e.target.value)}
+                      placeholder="e.g., CUHK-SZ Conference Complex I Room 701"
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={saveInterviewOverride}
+                      disabled={savingInterview}
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-purple-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {savingInterview ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                          Saving...
+                        </span>
+                      ) : (
+                        "Save Changes"
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setEditingInterview(false)}
+                      disabled={savingInterview}
+                      className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {interview && (interview.slotId || interview.scheduledAt) && (
+                    <button
+                      onClick={clearInterview}
+                      disabled={savingInterview}
+                      className="w-full text-sm text-red-600 hover:text-red-800 underline disabled:opacity-50"
+                    >
+                      🗑️ Clear interview schedule entirely
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -668,7 +812,6 @@ export default function ApplicationDetail() {
               })}
             </div>
 
-            {/* Action Buttons - ONLY stageStatus modifications */}
             <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-200">
               {!isRejected && (
                 <>
