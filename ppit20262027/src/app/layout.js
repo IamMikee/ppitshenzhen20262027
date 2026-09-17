@@ -2,7 +2,7 @@ import { Geist, Geist_Mono, Cinzel, Cinzel_Decorative, Montserrat } from "next/f
 import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
-import Header from "../Components/Header";
+import Header from "@/components/Header";
 import { Analytics } from "@vercel/analytics/next";
 
 const montserrat = Montserrat({

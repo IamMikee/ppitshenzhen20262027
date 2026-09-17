@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getSignatureById, updateSignature } from '../../../../../../../services/emailSignature';
-import SignatureEditor from '../../../../../../../Components/emailsignature/SignatureEditor';
+import SignatureEditor from '@/components/emailsignature/SignatureEditor';
 
 export default function EditSignaturePage() {
     const params = useParams();

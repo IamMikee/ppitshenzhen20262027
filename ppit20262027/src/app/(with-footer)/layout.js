@@ -2,8 +2,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import {useState, useEffect } from "react";
-import Header from "../../Components/Header";
-import LoadingScreen from "../../Components/LoadingScreen";
+import Header from "@/components/Header";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function WithFooterLayout({ children }) {
   const [loadingFinished, setLoadingFinished] = useState(false);

@@ -8,7 +8,7 @@ import {
     deleteSignature,
     setActiveSignature
 } from '../../../../../services/emailSignature';
-import SignatureCard from '../../../../../Components/emailsignature/SignatureCard';
+import SignatureCard from '@/components/emailsignature/SignatureCard';
 
 export default function SignaturesPage() {
     const router = useRouter();

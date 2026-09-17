@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from "firebase/firestore";
-import Header from "../../../Components/Header";
-import LoadingScreen from "../../../Components/LoadingScreen";
-import InterviewStage from "@/Components/interview-booking/InterviewStage";
+import Header from "@/components/Header";
+import LoadingScreen from "@/components/LoadingScreen";
+import InterviewStage from "@/components/interview-booking/InterviewStage";
 
 export default function RecruitmentPage() {
     const router = useRouter();

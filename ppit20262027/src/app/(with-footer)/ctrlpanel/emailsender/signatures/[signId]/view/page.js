@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getSignatureById } from '../../../../../../../services/emailSignature';
-import SignatureViewer from '../../../../../../../Components/emailsignature/SignatureViewer';
+import SignatureViewer from '@/components/emailsignature/SignatureViewer';
 
 export default function ViewSignaturePage() {
     const params = useParams();
