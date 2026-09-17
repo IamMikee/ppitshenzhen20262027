@@ -50,7 +50,7 @@ export const HOUR_SLOTS = Array.from(
 // ---------------------------------------------------------------------------
 export const INTERVIEW_WINDOWS = {
     cuhksz: {
-        open: '2026-09-17T14:00:00+08:00',
+        open: '2026-09-19T14:00:00+08:00',
         close: '2026-09-19T17:00:00+08:00',
     },
     utown: {
