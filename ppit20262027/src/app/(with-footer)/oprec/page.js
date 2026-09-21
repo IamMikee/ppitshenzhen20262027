@@ -1015,8 +1015,6 @@ export default function RecruitmentPage() {
     };
 
     const renderAccepted = () => {
-        // currentStage = 2: Stage 2 complete, Stage 3 pending (waiting for acceptance decision)
-        // currentStage = 3: Accepted
         if (currentStage === 2) {
             return (
                 <div className="text-center py-12">
@@ -1035,21 +1033,66 @@ export default function RecruitmentPage() {
             );
         }
 
+        const acceptedDivision = applicationData?.acceptedAs || null;
+
         return (
             <div className="text-center py-8">
                 <div className="text-6xl mb-4">🎉</div>
                 <h3 className="text-2xl font-bold text-green-600 mb-2">Congratulations!</h3>
-                <p className="text-gray-600 text-lg">You have been accepted to join PPIT Shenzhen 2026/2027!</p>
+                <p className="text-gray-600 text-lg">
+                    You have been accepted to join PPIT Shenzhen 2026/2027!
+                </p>
+
+                {acceptedDivision ? (
+                    <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-gray-600 mb-1">You have been accepted into</p>
+                        <p className="text-xl font-bold text-green-700">{acceptedDivision}</p>
+                    </div>
+                ) : (
+                    <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-md mx-auto">
+                        <p className="text-sm text-amber-800">
+                            ⏳ Your division assignment is being finalized.
+                            Please check back shortly — you will receive an email once it&apos;s ready.
+                        </p>
+                    </div>
+                )}
+
                 <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
                     <p className="text-sm text-gray-700">
                         Welcome to the team! Further instructions will be sent to your registered email.
-                        We're excited to have you on board! 🚀
+                        We&apos;re excited to have you on board! 🚀
                     </p>
                 </div>
+
                 {applicationData?.candidateId && (
                     <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg inline-block">
                         <p className="text-sm text-gray-600">Your Candidate ID:</p>
                         <p className="text-xl font-bold text-red-600">{applicationData.candidateId}</p>
+                    </div>
+                )}
+
+                {acceptedDivision && (
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-lg mx-auto">
+                        <p className="text-sm font-semibold text-blue-800 mb-1">
+                            📧 Please wait for the confirmation email
+                        </p>
+                        <p className="text-sm text-gray-700">
+                            We will send a confirmation email to{" "}
+                            <span className="font-medium text-gray-900">
+                                {applicationData?.email || "your registered email"}
+                            </span>{" "}
+                            with the next steps, including the link to join the official group chat.
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                            If you don&apos;t receive it within 48 hours, check your spam folder or contact{" "}
+                            <a
+                                href="mailto:ppitshenzhen@gmail.com"
+                                className="text-blue-600 underline"
+                            >
+                                ppitshenzhen@gmail.com
+                            </a>
+                            .
+                        </p>
                     </div>
                 )}
             </div>

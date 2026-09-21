@@ -81,6 +81,20 @@ const buildSlotId = (venueId, dayId, hour) =>
 
 const formatHour = (h) => `${String(h).padStart(2, "0")}:00`;
 
+const STAGE_STATUS_FILTERS = [
+  { label: "Form", value: "0", stageIndex: 0 },
+  { label: "Written Test", value: "1", stageIndex: 1 },
+  { label: "Interview", value: "2", stageIndex: 2 },
+  { label: "Accepted", value: "3", stageIndex: 3 },
+];
+
+// Returns 'completed' | 'pending' | 'locked' | 'rejected' | 'unknown'
+// Handles invalid input and capitalization issues; in case they come head capitalized
+const normalizeStatus = (raw) => {
+  if (!raw) return "unknown";
+  return String(raw).toLowerCase();
+};
+
 export default function AdminApplications() {
   const [applications, setApplications] = useState([]);
   const [filteredApplications, setFilteredApplications] = useState([]);
@@ -93,6 +107,9 @@ export default function AdminApplications() {
   const [testFilter, setTestFilter] = useState("");
   const [interviewDayKey, setInterviewDayKey] = useState("");
   const [interviewHour, setInterviewHour] = useState("");
+  const [interviewManualOnly, setInterviewManualOnly] = useState(false);
+  const [stageStatusFilter, setStageStatusFilter] = useState("");
+  const [acceptedAsFilter, setAcceptedAsFilter] = useState("");
   const [exporting, setExporting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const router = useRouter();
@@ -118,7 +135,18 @@ export default function AdminApplications() {
 
   useEffect(() => {
     applyFilters();
-  }, [applications, filterType, selectedDivision, selectedUniversity, testFilter, interviewDayKey, interviewHour]);
+  }, [
+    applications,
+    filterType,
+    selectedDivision,
+    selectedUniversity,
+    testFilter,
+    interviewDayKey,
+    interviewHour,
+    interviewManualOnly,
+    stageStatusFilter,
+    acceptedAsFilter,
+  ]);
 
   const fetchApplications = async () => {
     try {
@@ -139,7 +167,7 @@ export default function AdminApplications() {
   const applyFilters = () => {
     let filtered = [...applications];
 
-    // Filter by division choice
+    // Division filter
     if (filterType && selectedDivision) {
       filtered = filtered.filter((app) => {
         const choice = filterType === 'firstChoice' ? app.firstChoice : app.secondChoice;
@@ -147,7 +175,7 @@ export default function AdminApplications() {
       });
     }
 
-    // Filter by university
+    // University filter
     if (selectedUniversity) {
       const filter = UNIVERSITY_FILTERS.find(f => f.value === selectedUniversity);
       if (filter) {
@@ -158,17 +186,21 @@ export default function AdminApplications() {
       }
     }
 
-    // Filter by test submission
+    // Test submission filter
     if (testFilter === "submitted") {
       filtered = filtered.filter((app) => !!app.testUrl);
     } else if (testFilter === "not_submitted") {
       filtered = filtered.filter((app) => !app.testUrl);
     }
 
-    // Filter by interview slot
-    if (interviewHour) {
+    // Interview slot filter
+    if (interviewManualOnly) {
+      filtered = filtered.filter(
+        (app) => app.interview?.dayId && !app.interview?.slotId
+      ); // Only have dayId but not slotId
+    } else if (interviewHour) {
       if (interviewHour === "none") {
-        filtered = filtered.filter((app) => !app.interview?.slotId);
+        filtered = filtered.filter((app) => !app.interview?.slotId && !app.interview?.dayId && app.currentStage !== 4);
       } else if (interviewHour === "any" && interviewDayKey) {
         const [venueId, dayId] = interviewDayKey.split("|");
         const dayPrefix = `${venueId}_${dayId.replace(/-/g, "")}_`;
@@ -188,6 +220,30 @@ export default function AdminApplications() {
         const slotId = app.interview?.slotId;
         return slotId && slotId.startsWith(dayPrefix);
       });
+    }
+
+    // Stage status filter: match stageStatus == "completed"
+    if (stageStatusFilter !== "") {
+      const idx = Number(stageStatusFilter);
+      filtered = filtered.filter((app) => {
+        const status = app.stageStatus || {};
+
+        if (app.currentStage === 4) return false;
+
+        if (normalizeStatus(status[idx]) !== "completed") return false;
+
+        if (idx === 3) return true;
+
+        const next = status[idx + 1];
+        if (next === undefined || next === null) return false;
+
+        return normalizeStatus(next) === "pending";
+      });
+    }
+
+    // AcceptedAs filter
+    if (acceptedAsFilter) {
+      filtered = filtered.filter((app) => app.acceptedAs === acceptedAsFilter);
     }
 
     setFilteredApplications(filtered);
@@ -241,13 +297,13 @@ export default function AdminApplications() {
         const status = app.stageStatus || {};
         let newStage = 0;
 
-        if (Object.values(status).includes('rejected')) {
+        if (Object.values(status).some(s => normalizeStatus(s) === 'rejected')) {
           newStage = 4;
-        } else if (status[3] === 'completed') {
+        } else if (normalizeStatus(status[3]) === 'completed') {
           newStage = 3;
-        } else if (status[2] === 'completed') {
+        } else if (normalizeStatus(status[2]) === 'completed') {
           newStage = 2;
-        } else if (status[1] === 'completed') {
+        } else if (normalizeStatus(status[1]) === 'completed') {
           newStage = 1;
         } else {
           newStage = 0;
@@ -275,23 +331,74 @@ export default function AdminApplications() {
   };
 
   const getStatusBadge = (status) => {
+    const norm = normalizeStatus(status);
     const styles = {
       completed: "bg-green-100 text-green-700",
       pending: "bg-amber-100 text-amber-700",
       locked: "bg-gray-100 text-gray-500",
-      rejected: "bg-red-100 text-red-700"
+      rejected: "bg-red-100 text-red-700",
+      unknown: "bg-gray-100 text-gray-400",
     };
     const labels = {
       completed: "✅ Completed",
       pending: "📋 Pending",
       locked: "🔒 Locked",
-      rejected: "❌ Rejected"
+      rejected: "❌ Rejected",
+      unknown: "—",
     };
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.locked}`}>
-        {labels[status] || status}
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[norm] || styles.unknown}`}>
+        {labels[norm] || status}
       </span>
     );
+  };
+
+  // UNSAVED CHANGES DETECTION
+  // Compares stageStatus (admin draft) against currentStage (what user sees).
+  const hasUnsavedChanges = (app) => {
+    const status = app.stageStatus || {};
+    let derived = 0;
+
+    if (Object.values(status).some(s => normalizeStatus(s) === 'rejected')) {
+      derived = 4;
+    } else if (normalizeStatus(status[3]) === 'completed') {
+      derived = 3;
+    } else if (normalizeStatus(status[2]) === 'completed') {
+      derived = 2;
+    } else if (normalizeStatus(status[1]) === 'completed') {
+      derived = 1;
+    }
+
+    return derived !== (app.currentStage ?? 0);
+  };
+
+  // INTERVIEW CELL
+  const renderInterviewCell = (app) => {
+    const iv = app.interview;
+
+    // Prefer slotId when present (self-booked)
+    if (iv?.slotId) {
+      return (
+        <span className="text-purple-700 font-medium">
+          {iv.dayLabel?.split(",")[0] || iv.dayId}
+          {' · '}
+          {iv.hourLabel}
+        </span>
+      );
+    }
+
+    // Manually-edited entries have no slotId but do have dayId (checks for both)
+    if (iv?.manuallyEdited && iv?.dayId) {
+      return (
+        <span className="text-purple-700 font-medium">
+          {iv.dayLabel?.split(",")[0] || iv.dayId}
+          {iv.hourLabel ? ` · ${iv.hourLabel}` : ""}
+          <span className="text-xs text-amber-600 ml-1 italic">(manual)</span>
+        </span>
+      );
+    }
+
+    return <span className="text-gray-400 italic">Not booked</span>;
   };
 
   if (loading) {
@@ -378,7 +485,7 @@ export default function AdminApplications() {
             </div>
 
             {/* University Filter */}
-            <div className="flex-1 min-w-[150px]">
+            <div className="flex-1 min-w-[150px] max-w-[160px]">
               <p className="text-xs text-gray-500 font-medium mb-1">University</p>
               <div className="flex flex-wrap gap-2 items-center">
                 <select
@@ -403,7 +510,7 @@ export default function AdminApplications() {
             </div>
 
             {/* Test Submission Filter */}
-            <div className="flex-1 min-w-[150px]">
+            <div className="flex-1 min-w-[150px] max-w-[160px]">
               <p className="text-xs text-gray-500 font-medium mb-1">Test Submission</p>
               <div className="flex flex-wrap gap-2 items-center">
                 <select
@@ -426,8 +533,33 @@ export default function AdminApplications() {
               </div>
             </div>
 
+            {/* Stage Status Filter */}
+            <div className="flex-1 min-w-[150px] max-w-[160px]">
+              <p className="text-xs text-gray-500 font-medium mb-1">Stage Status (Completed)</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  value={stageStatusFilter}
+                  onChange={(e) => setStageStatusFilter(e.target.value)}
+                  className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">All</option>
+                  {STAGE_STATUS_FILTERS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                {stageStatusFilter && (
+                  <button
+                    onClick={() => setStageStatusFilter("")}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Interview Slot Filter */}
-            <div className="flex-1 min-w-[220px]">
+            <div className="flex-1 min-w-[220px] max-w-[230px]">
               <p className="text-xs text-gray-500 font-medium mb-1">Interview Slot</p>
               <div className="flex flex-wrap gap-2 items-center">
                 <select
@@ -435,6 +567,7 @@ export default function AdminApplications() {
                   onChange={(e) => {
                     setInterviewDayKey(e.target.value);
                     setInterviewHour("");
+                    setInterviewManualOnly(false);
                   }}
                   className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
@@ -448,7 +581,10 @@ export default function AdminApplications() {
 
                 <select
                   value={interviewHour}
-                  onChange={(e) => setInterviewHour(e.target.value)}
+                  onChange={(e) => {
+                    setInterviewHour(e.target.value);
+                    setInterviewManualOnly(false);
+                  }}
                   disabled={!interviewDayKey}
                   className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
@@ -463,11 +599,12 @@ export default function AdminApplications() {
                   ))}
                 </select>
 
-                {(interviewDayKey || interviewHour) && (
+                {(interviewDayKey || interviewHour || interviewManualOnly) && (
                   <button
                     onClick={() => {
                       setInterviewDayKey("");
                       setInterviewHour("");
+                      setInterviewManualOnly(false);
                     }}
                     className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
                   >
@@ -481,6 +618,7 @@ export default function AdminApplications() {
                   onClick={() => {
                     setInterviewDayKey("");
                     setInterviewHour("none");
+                    setInterviewManualOnly(false);
                   }}
                   className={`px-2 py-1 rounded text-xs font-medium transition-colors ${interviewHour === "none"
                     ? "bg-red-600 text-white"
@@ -489,12 +627,51 @@ export default function AdminApplications() {
                 >
                   Not Booked
                 </button>
+
+                <button
+                  onClick={() => {
+                    setInterviewDayKey("");
+                    setInterviewHour("");
+                    setInterviewManualOnly(true);
+                  }}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${interviewManualOnly
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                >
+                  Manually Booked
+                </button>
               </div>
             </div>
           </div>
 
+          {/* Accepted As Filter */}
+          <div className="flex-1 min-w-[180px]">
+            <p className="text-xs text-gray-500 font-medium mb-1">Accepted As</p>
+            <div className="flex flex-wrap gap-2 items-center">
+              <select
+                value={acceptedAsFilter}
+                onChange={(e) => setAcceptedAsFilter(e.target.value)}
+                className="border text-gray-500 border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                <option value="">All Divisions</option>
+                {DIVISIONS.map((div) => (
+                  <option key={div.code} value={div.name}>{div.name}</option>
+                ))}
+              </select>
+              {acceptedAsFilter && (
+                <button
+                  onClick={() => setAcceptedAsFilter("")}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Active filters display */}
-          {(filterType || selectedUniversity || testFilter || interviewDayKey || interviewHour) && (
+          {(filterType || selectedUniversity || testFilter || interviewDayKey || interviewHour || interviewManualOnly || stageStatusFilter || acceptedAsFilter) && (
             <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
               <span className="text-xs text-gray-500">Active filters:</span>
               {filterType && selectedDivision && (
@@ -510,6 +687,11 @@ export default function AdminApplications() {
               {testFilter && (
                 <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs">
                   Test: {testFilter === 'submitted' ? 'Submitted' : 'Not Submitted'}
+                </span>
+              )}
+              {stageStatusFilter && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs">
+                  Stage: {STAGE_STATUS_FILTERS.find(s => s.value === stageStatusFilter)?.label} Completed
                 </span>
               )}
               {interviewHour === "none" && (
@@ -532,6 +714,16 @@ export default function AdminApplications() {
                   {INTERVIEW_DAYS.find(d => `${d.venueId}|${d.dayId}` === interviewDayKey)?.dayLabel}
                 </span>
               )}
+              {interviewManualOnly && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs">
+                  Interview: Manually Booked
+                </span>
+              )}
+              {acceptedAsFilter && (
+                <span className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full text-xs">
+                  Accepted: {acceptedAsFilter}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -549,6 +741,7 @@ export default function AdminApplications() {
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Second Choice</th>
                   <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stage</th>
                   <th className="min-w-[160px] max-w-[180px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Interview</th>
+                  <th className="min-w-[140px] max-w-[160px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accepted As</th>
                   <th className="min-w-[200px] max-w-[240px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="min-w-[100px] max-w-[120px] px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -570,16 +763,20 @@ export default function AdminApplications() {
                         }`}>
                         {STAGES.find(s => s.index === app.currentStage)?.label || `Stage ${app.currentStage + 1}`}
                       </span>
+                      {hasUnsavedChanges(app) && (
+                        <div className="mt-1 text-[10px] text-amber-600 italic leading-tight whitespace-normal">
+                          ⚠️ Unsaved stage changes
+                        </div>
+                      )}
                     </td>
                     <td className="min-w-[160px] max-w-[180px] px-6 py-4 whitespace-nowrap text-sm">
-                      {app.interview?.slotId ? (
-                        <span className="text-purple-700 font-medium">
-                          {app.interview.dayLabel?.split(",")[0] || app.interview.dayId}
-                          {' · '}
-                          {app.interview.hourLabel}
-                        </span>
+                      {renderInterviewCell(app)}
+                    </td>
+                    <td className="min-w-[140px] max-w-[160px] px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">
+                      {app.acceptedAs ? (
+                        <span className="text-teal-700 font-medium">{app.acceptedAs}</span>
                       ) : (
-                        <span className="text-gray-400 italic">Not booked</span>
+                        <span className="text-gray-400 italic">—</span>
                       )}
                     </td>
                     <td className="min-w-[200px] max-w-[240px] px-6 py-4 whitespace-nowrap">

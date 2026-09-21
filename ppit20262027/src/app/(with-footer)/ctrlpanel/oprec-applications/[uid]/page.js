@@ -7,6 +7,17 @@ import { doc, getDoc, updateDoc, Timestamp, deleteField } from "firebase/firesto
 import Link from "next/link";
 import { VENUES, getVenueForApplicant } from "@/lib/interview_booking/constants";
 
+// Must match the divisions used on the applicant form
+const DIVISIONS = [
+  { name: "Dana Usaha", code: "DU" },
+  { name: "Departemen Olahraga", code: "DO" },
+  { name: "Hubungan Masyarakat", code: "HM" },
+  { name: "Informasi Teknologi", code: "IT" },
+  { name: "Media Kreatif", code: "MK" },
+  { name: "Perkembangan Karir & Akademik", code: "PKA" },
+  { name: "Sosial Budaya", code: "SB" },
+];
+
 export default function ApplicationDetail() {
   const router = useRouter();
   const params = useParams();
@@ -20,10 +31,16 @@ export default function ApplicationDetail() {
 
   // Interview edit state
   const [editingInterview, setEditingInterview] = useState(false);
-  const [editDate, setEditDate] = useState("");     // "YYYY-MM-DD"
-  const [editHour, setEditHour] = useState("");     // "HH:MM"
+  const [editDate, setEditDate] = useState("");
+  const [editHour, setEditHour] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [savingInterview, setSavingInterview] = useState(false);
+
+  // Acceptance flow state
+  const [showAcceptBox, setShowAcceptBox] = useState(false);   // true after clicking Accept
+  const [selectedDivision, setSelectedDivision] = useState(""); // chosen division
+  const [confirmingAccept, setConfirmingAccept] = useState(false);
+  const [savingAccept, setSavingAccept] = useState(false);
 
   // ─── MANUAL TOGGLES ───────────────────────────────────────────
   const showPersonalInfo = true;
@@ -60,11 +77,15 @@ export default function ApplicationDetail() {
         const data = { id: appSnap.id, ...appSnap.data() };
         setApplication(data);
 
-        // Prefill the edit form from the current interview object
         if (data.interview) {
           setEditDate(data.interview.dayId || "");
           setEditHour(data.interview.hourLabel || "");
           setEditLocation(data.interview.location || "");
+        }
+
+        // Prefill the acceptance picker if already accepted
+        if (data.acceptedAs) {
+          setSelectedDivision(data.acceptedAs);
         }
       } else {
         setApplication(null);
@@ -76,13 +97,12 @@ export default function ApplicationDetail() {
     }
   };
 
-  // ─── MANUAL INTERVIEW OVERRIDE (ADMIN) ─────────────────────
+  // ─── INTERVIEW OVERRIDE (unchanged) ──────────────────────────
   const saveInterviewOverride = async () => {
     if (!editDate || !editHour) {
       alert("Please fill in both date and time.");
       return;
     }
-
     setSavingInterview(true);
     try {
       const [hh, mm] = editHour.split(":").map(Number);
@@ -98,19 +118,14 @@ export default function ApplicationDetail() {
       const existing = application.interview || {};
       const updatedInterview = {
         ...existing,
-
         dayId: editDate,
         hourLabel: editHour,
         endLabel,
         scheduledAt: Timestamp.fromDate(scheduled),
-
         venueId: venue?.id || existing.venueId || null,
         venueLabel: venue?.label || existing.venueLabel || null,
-
         location: editLocation || existing.location || venue?.label || "",
-
         status: existing.status || "scheduled",
-
         manuallyEdited: true,
         manuallyEditedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -159,7 +174,59 @@ export default function ApplicationDetail() {
     }
   };
 
-  // ─── STAGE STATUS ONLY — NO currentStage MODIFICATION ───
+  // ─── ACCEPT FLOW ──────────────────────────────────────────────
+  const beginAccept = () => {
+    setSelectedDivision(application.acceptedAs || "");
+    setShowAcceptBox(true);
+    setConfirmingAccept(false);
+  };
+
+  const cancelAccept = () => {
+    setShowAcceptBox(false);
+    setConfirmingAccept(false);
+    setSelectedDivision(application.acceptedAs || "");
+  };
+
+  const requestConfirmAccept = () => {
+    if (!selectedDivision) {
+      alert("Please pick a division first.");
+      return;
+    }
+    setConfirmingAccept(true);
+  };
+
+  const commitAccept = async () => {
+    setSavingAccept(true);
+    try {
+      const appRef = doc(db, "applications", uid);
+
+      // Mark stage 3 as completed + set acceptedAs
+      const updatedStageStatus = { ...application.stageStatus };
+      updatedStageStatus[3] = "completed";
+
+      await updateDoc(appRef, {
+        stageStatus: updatedStageStatus,
+        acceptedAs: selectedDivision,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await fetchApplication();
+      setShowAcceptBox(false);
+      setConfirmingAccept(false);
+      alert(
+        application.acceptedAs
+          ? `✅ Division updated to "${selectedDivision}".`
+          : `✅ ${application.name} accepted into "${selectedDivision}".`
+      );
+    } catch (error) {
+      console.error("Error accepting applicant:", error);
+      alert("Failed to save. Please try again.");
+    } finally {
+      setSavingAccept(false);
+    }
+  };
+
+  // ─── STAGE STATUS ONLY ───────────────────────────────────────
   const updateStageStatusOnly = async (stageIndex, newStatus) => {
     const appRef = doc(db, "applications", uid);
     const updatedStageStatus = { ...application.stageStatus };
@@ -167,7 +234,7 @@ export default function ApplicationDetail() {
 
     await updateDoc(appRef, {
       stageStatus: updatedStageStatus,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
 
     await fetchApplication();
@@ -185,25 +252,27 @@ export default function ApplicationDetail() {
       const appRef = doc(db, "applications", uid);
       const updatedStageStatus = { ...application.stageStatus };
 
-      updatedStageStatus[stageIndex] = 'completed';
+      updatedStageStatus[stageIndex] = "completed";
 
-      if (stageIndex + 1 < 4 && updatedStageStatus[stageIndex + 1] !== 'rejected') {
-        updatedStageStatus[stageIndex + 1] = 'pending';
+      if (stageIndex + 1 < 4 && updatedStageStatus[stageIndex + 1] !== "rejected") {
+        updatedStageStatus[stageIndex + 1] = "pending";
       }
 
       for (let i = stageIndex + 2; i < 4; i++) {
-        if (updatedStageStatus[i] !== 'rejected') {
-          updatedStageStatus[i] = 'locked';
+        if (updatedStageStatus[i] !== "rejected") {
+          updatedStageStatus[i] = "locked";
         }
       }
 
       await updateDoc(appRef, {
         stageStatus: updatedStageStatus,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
 
       await fetchApplication();
-      alert(`✅ "${stageLabel}" marked as completed. "${getStageLabel(stageIndex + 1)}" is now pending.`);
+      alert(
+        `✅ "${stageLabel}" marked as completed. "${getStageLabel(stageIndex + 1)}" is now pending.`
+      );
     } catch (error) {
       console.error("Error updating stage:", error);
       alert("Failed to update stage. Please try again.");
@@ -219,18 +288,17 @@ export default function ApplicationDetail() {
     const confirmed = window.confirm(
       `Are you sure you want to REJECT ${application.name} at "${stageLabel}" stage?\n\nThis will mark the current stage as rejected while keeping previous stages as completed.\n\nThis action CANNOT be undone.`
     );
-
     if (!confirmed) return;
 
     setUpdating(true);
     try {
       const appRef = doc(db, "applications", uid);
       const updatedStageStatus = { ...application.stageStatus };
-      updatedStageStatus[currentStage] = 'rejected';
+      updatedStageStatus[currentStage] = "rejected";
 
       await updateDoc(appRef, {
         stageStatus: updatedStageStatus,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
 
       await fetchApplication();
@@ -246,12 +314,11 @@ export default function ApplicationDetail() {
   const handleUnreject = async () => {
     let rejectedStageIndex = -1;
     for (let i = 0; i < 4; i++) {
-      if (application.stageStatus?.[i] === 'rejected') {
+      if (application.stageStatus?.[i] === "rejected") {
         rejectedStageIndex = i;
         break;
       }
     }
-
     if (rejectedStageIndex === -1) {
       alert("No rejected stage found.");
       return;
@@ -260,12 +327,11 @@ export default function ApplicationDetail() {
     const confirmed = window.confirm(
       `Are you sure you want to UNREJECT ${application.name}?\n\nThis will set "${getStageLabel(rejectedStageIndex)}" back to "completed".`
     );
-
     if (!confirmed) return;
 
     setUpdating(true);
     try {
-      await updateStageStatusOnly(rejectedStageIndex, 'completed');
+      await updateStageStatusOnly(rejectedStageIndex, "completed");
       alert(`✅ ${application.name} has been unrejected.`);
     } catch (error) {
       console.error("Error unrejecting applicant:", error);
@@ -285,13 +351,13 @@ export default function ApplicationDetail() {
       completed: "bg-green-100 text-green-700",
       pending: "bg-amber-100 text-amber-700",
       locked: "bg-gray-100 text-gray-500",
-      rejected: "bg-red-100 text-red-700"
+      rejected: "bg-red-100 text-red-700",
     };
     const labels = {
       completed: "✅ Completed",
       pending: "📋 Pending",
       locked: "🔒 Locked",
-      rejected: "❌ Rejected"
+      rejected: "❌ Rejected",
     };
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.locked}`}>
@@ -311,9 +377,7 @@ export default function ApplicationDetail() {
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (!isAdmin) return null;
 
   if (!application) {
     return (
@@ -328,20 +392,22 @@ export default function ApplicationDetail() {
     );
   }
 
-  const isRejected = Object.values(application.stageStatus || {}).includes('rejected');
+  const isRejected = Object.values(application.stageStatus || {}).includes("rejected");
   const currentStage = application.currentStage;
+  const isAccepted = application.stageStatus?.[3] === "completed";
+  const savedDivision = application.acceptedAs || "";
+  const divisionChanged = selectedDivision && selectedDivision !== savedDivision;
 
   let rejectedStageIndex = -1;
   if (isRejected) {
     for (let i = 0; i < 4; i++) {
-      if (application.stageStatus?.[i] === 'rejected') {
+      if (application.stageStatus?.[i] === "rejected") {
         rejectedStageIndex = i;
         break;
       }
     }
   }
 
-  // Interview display helpers
   const interview = application.interview || null;
   const venueLabel =
     VENUES.find((v) => v.id === interview?.venueId)?.label ||
@@ -361,25 +427,30 @@ export default function ApplicationDetail() {
 
         {/* Header */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-          <div className={`px-6 py-4 border-b ${isRejected ? 'bg-red-50' : 'bg-gradient-to-r from-red-50 to-amber-50'}`}>
+          <div className={`px-6 py-4 border-b ${isRejected ? "bg-red-50" : "bg-gradient-to-r from-red-50 to-amber-50"}`}>
             <div className="flex justify-between items-start">
               <div>
                 <h1 className="text-2xl font-bold font-montserrat text-gray-800">
                   Application Details
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
-                  Submitted on {new Date(application.submittedAt).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
+                  Submitted on {new Date(application.submittedAt).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
                   })}
                 </p>
               </div>
               {isRejected && rejectedStageIndex !== -1 && (
                 <span className="px-4 py-2 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
                   ❌ Rejected at "{getStageLabel(rejectedStageIndex)}"
+                </span>
+              )}
+              {!isRejected && isAccepted && savedDivision && (
+                <span className="px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                  ✅ Accepted as {savedDivision}
                 </span>
               )}
             </div>
@@ -409,11 +480,13 @@ export default function ApplicationDetail() {
               </div>
               <div>
                 <p className="text-sm text-gray-500 font-medium">Birth Date</p>
-                <p className="text-gray-900">{new Date(application.birthDate).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}</p>
+                <p className="text-gray-900">
+                  {new Date(application.birthDate).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
               </div>
             </div>
           </div>
@@ -558,7 +631,7 @@ export default function ApplicationDetail() {
                         View Test Answers
                       </a>
                       {application.testSubmittedAt && (() => {
-                        const deadline = new Date('2026-09-16T23:59:00+08:00');
+                        const deadline = new Date("2026-09-16T23:59:00+08:00");
                         const submittedDate = new Date(application.testSubmittedAt);
                         const isLate = submittedDate > deadline;
                         return isLate ? (
@@ -570,15 +643,15 @@ export default function ApplicationDetail() {
                     </div>
                     {application.testSubmittedAt && (
                       <p className="text-xs text-gray-400">
-                        Submitted on: {new Date(application.testSubmittedAt).toLocaleString('id-ID', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
+                        Submitted on: {new Date(application.testSubmittedAt).toLocaleString("id-ID", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
                         {(() => {
-                          const deadline = new Date('2026-09-16T23:59:00+08:00');
+                          const deadline = new Date("2026-09-16T23:59:00+08:00");
                           const submittedDate = new Date(application.testSubmittedAt);
                           const isLate = submittedDate > deadline;
                           return isLate ? (
@@ -598,7 +671,7 @@ export default function ApplicationDetail() {
           </div>
         )}
 
-        {/* Interview Schedule (shown once they've passed the written test) */}
+        {/* Interview Schedule */}
         {currentStage >= 1 && currentStage !== 4 && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
@@ -628,7 +701,6 @@ export default function ApplicationDetail() {
                 </p>
               </div>
 
-              {/* Current booking */}
               {interview && (interview.slotId || interview.scheduledAt) ? (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -644,13 +716,13 @@ export default function ApplicationDetail() {
                     <p className="text-xs text-gray-500">Date &amp; Time</p>
                     <p className="text-sm font-semibold text-gray-800">
                       {interview.scheduledAt?.toDate
-                        ? interview.scheduledAt.toDate().toLocaleString('id-ID', {
-                          weekday: 'long',
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
+                        ? interview.scheduledAt.toDate().toLocaleString("id-ID", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })
                         : interview.dayId
                           ? `${interview.dayId} · ${interview.hourLabel || ""}`
@@ -676,7 +748,7 @@ export default function ApplicationDetail() {
                     <p className="text-xs text-amber-700 italic">
                       ⚠️ Manually edited by admin
                       {interview.manuallyEditedAt?.toDate
-                        ? ` on ${interview.manuallyEditedAt.toDate().toLocaleString('id-ID')}`
+                        ? ` on ${interview.manuallyEditedAt.toDate().toLocaleString("id-ID")}`
                         : ""}
                     </p>
                   )}
@@ -687,7 +759,6 @@ export default function ApplicationDetail() {
                 </div>
               )}
 
-              {/* Edit panel */}
               {editingInterview && (
                 <div className="border-t border-gray-200 pt-4 space-y-4">
                   <p className="text-sm font-semibold text-gray-700">Manual Override</p>
@@ -772,6 +843,108 @@ export default function ApplicationDetail() {
           </div>
         )}
 
+        {/* Acceptance Box — only shows after Accept clicked */}
+        {showAcceptBox && !isRejected && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border-2 border-green-200">
+            <div className="px-6 py-4 bg-green-50 border-b flex justify-between items-center">
+              <h2 className="text-lg font-semibold font-montserrat text-green-800">
+                ✅ {isAccepted ? "Change Accepted Division" : "Accept Applicant"}
+              </h2>
+              <button
+                onClick={cancelAccept}
+                disabled={savingAccept}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors disabled:opacity-50"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Accepted Division <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedDivision}
+                  onChange={(e) => {
+                    setSelectedDivision(e.target.value);
+                    setConfirmingAccept(false);
+                  }}
+                  disabled={savingAccept}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                >
+                  <option value="">— Pick a division —</option>
+                  {DIVISIONS.map((d) => (
+                    <option key={d.code} value={d.name}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+                {savedDivision && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Currently accepted as <span className="font-semibold">{savedDivision}</span>.
+                  </p>
+                )}
+              </div>
+
+              {/* Division hint — original choices */}
+              <div className="text-xs text-gray-500 flex flex-wrap gap-3">
+                <span>
+                  1st choice: <span className="font-medium text-gray-700">{application.firstChoice || "—"}</span>
+                </span>
+                <span>
+                  2nd choice: <span className="font-medium text-gray-700">{application.secondChoice || "—"}</span>
+                </span>
+              </div>
+
+              {/* Step 2: confirmation warning */}
+              {confirmingAccept && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-amber-800 mb-1">
+                    ⚠️ Confirm action
+                  </p>
+                  <p className="text-sm text-amber-800">
+                    {isAccepted
+                      ? <>Switch <span className="font-semibold">{application.name}</span>'s accepted division from <span className="font-semibold">{savedDivision}</span> to <span className="font-semibold">{selectedDivision}</span>?</>
+                      : <>Accept <span className="font-semibold">{application.name}</span> into <span className="font-semibold">{selectedDivision}</span>? This will mark the "Accepted" stage as completed.</>}
+                  </p>
+                  <div className="flex gap-3 mt-3">
+                    <button
+                      onClick={commitAccept}
+                      disabled={savingAccept}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {savingAccept ? "Saving..." : "Yes, confirm"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingAccept(false)}
+                      disabled={savingAccept}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Primary action button */}
+              {!confirmingAccept && (
+                <button
+                  onClick={requestConfirmAccept}
+                  disabled={savingAccept || !selectedDivision || (isAccepted && !divisionChanged)}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAccepted
+                    ? divisionChanged
+                      ? `Switch to "${selectedDivision}"`
+                      : "Pick a different division to switch"
+                    : "Confirm Acceptance"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Progress Status & Actions */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
           <div className="px-6 py-4 bg-gray-50 border-b">
@@ -784,7 +957,7 @@ export default function ApplicationDetail() {
               {[0, 1, 2, 3, 4].map((stage) => {
                 let status;
                 if (stage === 4) {
-                  status = isRejected ? 'rejected' : 'locked';
+                  status = isRejected ? "rejected" : "locked";
                 } else {
                   status = application.stageStatus?.[stage] || "locked";
                 }
@@ -817,32 +990,51 @@ export default function ApplicationDetail() {
                 <>
                   <button
                     onClick={() => handleStageComplete(0)}
-                    disabled={updating || application.stageStatus?.[0] === 'completed'}
+                    disabled={updating || application.stageStatus?.[0] === "completed"}
                     className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
                     Complete Form
                   </button>
                   <button
                     onClick={() => handleStageComplete(1)}
-                    disabled={updating || application.stageStatus?.[1] === 'completed' || application.stageStatus?.[0] !== 'completed'}
+                    disabled={updating || application.stageStatus?.[1] === "completed" || application.stageStatus?.[0] !== "completed"}
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
                     Complete Written Test
                   </button>
                   <button
                     onClick={() => handleStageComplete(2)}
-                    disabled={updating || application.stageStatus?.[2] === 'completed' || application.stageStatus?.[1] !== 'completed'}
+                    disabled={updating || application.stageStatus?.[2] === "completed" || application.stageStatus?.[1] !== "completed"}
                     className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
                   >
                     Complete Interview
                   </button>
+
+                  {/* Accept button — behavior depends on isAccepted */}
                   <button
-                    onClick={() => handleStageComplete(3)}
-                    disabled={updating || application.stageStatus?.[3] === 'completed' || application.stageStatus?.[2] !== 'completed'}
-                    className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
+                    onClick={() => {
+                      if (isAccepted) {
+                        // Already accepted → open box directly to change division
+                        beginAccept();
+                      } else {
+                        if (application.stageStatus?.[2] !== "completed") return;
+                        beginAccept();
+                      }
+                    }}
+                    disabled={
+                      updating ||
+                      (isAccepted
+                        ? false // always clickable when accepted (edit mode)
+                        : application.stageStatus?.[2] !== "completed")
+                    }
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors text-white disabled:bg-gray-300 disabled:cursor-not-allowed ${isAccepted
+                        ? "bg-emerald-500 hover:bg-emerald-600"
+                        : "bg-green-500 hover:bg-green-600"
+                      }`}
                   >
-                    Accept ✅
+                    {isAccepted ? "Edit Acceptance ✏️" : "Accept ✅"}
                   </button>
+
                   <button
                     onClick={handleReject}
                     disabled={updating}
