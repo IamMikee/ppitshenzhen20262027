@@ -243,7 +243,7 @@ export default function AdminApplications() {
 
     // AcceptedAs filter
     if (acceptedAsFilter) {
-      filtered = filtered.filter((app) => app.acceptedAs === acceptedAsFilter);
+      filtered = filtered.filter((app) => app.acceptedAs === acceptedAsFilter && app.currentStage !== 4);
     }
 
     setFilteredApplications(filtered);
