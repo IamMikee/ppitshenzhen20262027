@@ -1112,7 +1112,7 @@ export default function RecruitmentPage() {
                     </p>
                     <p className="text-gray-600">
                         After careful consideration, we regret to inform you that your application
-                        was not selected to proceed further from the <strong>"{stageLabel}"</strong> stage.
+                        was not selected to proceed further.
                     </p>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
                         <p className="text-gray-700 text-sm">
