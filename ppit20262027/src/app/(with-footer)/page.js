@@ -46,39 +46,39 @@ export default function Home() {
         },
     ];
 
-    // Dummy News Data (UI only)
+    // Dummy News Data linking to /news/[slug]
     const newsData = [
         {
             id: 1,
-            title: "PPIT Shenzhen Welcomes New Freshmen for Academic Year 2026/2027",
-            date: "October 20, 2026",
-            description: "Welcoming over 150 new Indonesian students across universities in Shenzhen with our annual orientation programs and community gatherings.",
-            link: "/news/welcoming-freshmen-2026",
-            image: PPITMobile
+            title: "Essential Do's & Don'ts in East Asia: Cultural Etiquette Guide for Students",
+            date: "October 28, 2026",
+            description: "From dining etiquette and public transit manners to managing trash and carrying cash, here is what every student living abroad in Asia needs to know.",
+            link: "/news/dos-donts-japan",
+            image: GuidebookImage
         },
         {
             id: 2,
+            title: "Global Health & Travel Alert: 2026 Epidemic Preparedness & Advisory",
+            date: "October 28, 2026",
+            description: "Health officials issue international health protocols and travel safety guidelines as regional disease surveillance expands globally.",
+            link: "/news/global-health-update-2026",
+            image: PPITMobile
+        },
+        {
+            id: 3,
             title: "Shenzhen Cup 2026: Annual Sports & Cultural Championship",
             date: "October 14, 2026",
             description: "Get ready for the biggest annual student tournament hosted by PPIT Shenzhen, bringing together talent, sportsmanship, and creativity.",
             link: "/news/shenzhen-cup-2026",
-            image: GuidebookImage
+            image: Mission
         },
         {
-            id: 3,
+            id: 4,
             title: "Academic & Career Development Talkshow with Guest Speakers",
             date: "September 28, 2026",
             description: "An inspiring career development talkshow connecting Indonesian students with industry leaders and professional opportunities in Shenzhen.",
             link: "/news/career-talkshow-2026",
             image: AboutImage
-        },
-        {
-            id: 4,
-            title: "Audiovisual & Stage Engineering Workshop Series Initiated",
-            date: "September 15, 2026",
-            description: "Hands-on training session covering digital sound consoles, stage lighting, and multimedia infrastructure for student organization committee members.",
-            link: "/news/av-engineering-workshop",
-            image: Mission
         }
     ];
 
@@ -415,17 +415,26 @@ export default function Home() {
                     </div>
                 </section>
                 
-                {/* ========================================== */}
                 {/*              NEWS SECTION                  */}
-                {/* ========================================== */}
                 <section className="bg-[#7E0C0E] py-16 px-4 md:px-8 font-montserrat border-t border-white/10">
                     <div className="max-w-7xl mx-auto">
-                        {/* Section Header */}
-                        <div className="flex flex-col items-center mb-12">
+                        {/* Section Header with Navigation Link to /news */}
+                        <div className="flex flex-col items-center mb-12 relative">
                             <h2 className="text-2xl md:text-4xl font-bold text-white font-montserrat tracking-wide uppercase text-center">
                                 Latest News & Events
                             </h2>
-                            <div className="w-20 h-1 bg-amber-400 mt-3 rounded-full"></div>
+                            <div className="w-20 h-1 bg-amber-400 mt-3 rounded-full mb-4"></div>
+                            
+                            {/* Link to full News Listing Page */}
+                            <Link 
+                                href="/news"
+                                className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 text-sm md:text-base font-bold uppercase tracking-wider transition-all duration-200 hover:underline"
+                            >
+                                <span>View All News & Events</span>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </Link>
                         </div>
 
                         {/* Carousel Container */}
@@ -506,7 +515,7 @@ export default function Home() {
                                                         </p>
                                                     </div>
 
-                                                    {/* Learn More Button */}
+                                                    {/* Learn More Button pointing to full article dynamic route */}
                                                     <div className="pt-2 border-t border-white/10 flex justify-end">
                                                         <Link
                                                             href={news.link}
@@ -544,7 +553,6 @@ export default function Home() {
                     </div>
                 </section>
 
-
                 {/* University List */}
                 <section className="bg-[#7E0C0E] py-16 px-4 md:px-8">
                     <div className="max-w-7xl mx-auto">
@@ -580,8 +588,6 @@ export default function Home() {
                         </div>
                     </div>
                 </section>
-
-                
             </div>
         </>
     );

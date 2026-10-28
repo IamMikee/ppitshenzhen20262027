@@ -174,6 +174,23 @@ const Header = () => {
 				>
 					Home
 				</Link>
+
+				<Link
+					href="/news"
+					className={`md:text-2xl text-xl hover:text-[#8C0000] font-montserrat font-semibold ${
+						isScrolled && !menuOpen
+							? "text-[#8C0000]"
+							: menuOpen
+							? "text-[#8C0000]"
+							: "text-white"
+					}`}
+					onClick={() => {
+						setMenuOpen(false);
+					}}
+				>
+					News & Events
+				</Link>
+
 				<Link
 					href="/committee"
 					className={`md:text-2xl text-xl hover:text-[#8C0000] font-montserrat font-semibold ${
