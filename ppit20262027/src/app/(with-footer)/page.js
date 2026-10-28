@@ -414,43 +414,7 @@ export default function Home() {
                         </div>
                     </div>
                 </section>
-
-                {/* University List */}
-                <section className="bg-[#7E0C0E] py-16 px-4 md:px-8">
-                    <div className="max-w-7xl mx-auto">
-                        <div className="flex justify-center">
-                            <h2 className="text-lg md:text-3xl sm:text-xl font-bold mb-12 text-red-800 bg-white inline-block py-3 md:py-4 px-6 rounded-lg font-montserrat">
-                                UNIVERSITIES IN SHENZHEN
-                            </h2>
-                        </div>
-
-                        <div className="flex justify-center mx-6 mb-6">
-                            <div className="space-y-12 relative font-title">
-                                {universities.map((uni, index) => (
-                                    <div key={index} className="flex items-center gap-6 relative">
-                                        <div className="w-6 h-6 rounded-full border-[3px] border-white relative z-10"
-                                            style={{ backgroundColor: uni.color }}
-                                        ></div>
-
-                                        {index < universities.length - 1 && (
-                                            <div className="absolute left-[0.6rem] top-6 h-[calc(100%+3rem)] w-1 bg-white z-0"></div>
-                                        )}
-
-                                        <div>
-                                            <h3 className="md:text-xl sm:text-md text-sm text-white font-semibold font-montserrat">
-                                                {uni.name}
-                                            </h3>
-                                            <p className="md:text-xl sm:text-md text-sm text-white font-montserrat">
-                                                {uni.ranking}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
+                
                 {/* ========================================== */}
                 {/*              NEWS SECTION                  */}
                 {/* ========================================== */}
@@ -579,6 +543,45 @@ export default function Home() {
                         </div>
                     </div>
                 </section>
+
+
+                {/* University List */}
+                <section className="bg-[#7E0C0E] py-16 px-4 md:px-8">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="flex justify-center">
+                            <h2 className="text-lg md:text-3xl sm:text-xl font-bold mb-12 text-red-800 bg-white inline-block py-3 md:py-4 px-6 rounded-lg font-montserrat">
+                                UNIVERSITIES IN SHENZHEN
+                            </h2>
+                        </div>
+
+                        <div className="flex justify-center mx-6 mb-6">
+                            <div className="space-y-12 relative font-title">
+                                {universities.map((uni, index) => (
+                                    <div key={index} className="flex items-center gap-6 relative">
+                                        <div className="w-6 h-6 rounded-full border-[3px] border-white relative z-10"
+                                            style={{ backgroundColor: uni.color }}
+                                        ></div>
+
+                                        {index < universities.length - 1 && (
+                                            <div className="absolute left-[0.6rem] top-6 h-[calc(100%+3rem)] w-1 bg-white z-0"></div>
+                                        )}
+
+                                        <div>
+                                            <h3 className="md:text-xl sm:text-md text-sm text-white font-semibold font-montserrat">
+                                                {uni.name}
+                                            </h3>
+                                            <p className="md:text-xl sm:text-md text-sm text-white font-montserrat">
+                                                {uni.ranking}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                
             </div>
         </>
     );
