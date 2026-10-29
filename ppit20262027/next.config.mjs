@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    serverExternalPackages: ["firebase-admin"],
+    serverExternalPackages: ["firebase-admin", "@react-pdf/renderer"],
 };
 
 export default nextConfig;

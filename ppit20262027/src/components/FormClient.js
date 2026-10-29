@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { submitResponse } from "../services/forms";
+import TicketCard from "./TicketCard";
 import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -108,6 +109,11 @@ export default function FormClient({ form }) {
         </div>
       </div>
     );
+  }
+
+  // Ticketed forms: after submitting (now or earlier) the user sees their ticket
+  if (form.ticket?.enabled && (success || formSubmitted)) {
+    return <TicketCard formId={form.id} heading={form.title} onBack={() => router.push('/form')} />;
   }
 
   if (formSubmitted) {

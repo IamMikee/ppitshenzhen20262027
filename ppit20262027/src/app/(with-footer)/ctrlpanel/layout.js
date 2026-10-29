@@ -67,6 +67,11 @@ export default function ControlPanelLayout({ children }) {
             name: "OPREC Applications",
             path: "/ctrlpanel/oprec-applications",
             active: pathname === "/ctrlpanel/oprec-applications"
+        },
+        {
+            name: "Ticket Check-in",
+            path: "/ctrlpanel/tickets",
+            active: pathname === "/ctrlpanel/tickets"
         }
         // Add more nav items here as you create them
     ];

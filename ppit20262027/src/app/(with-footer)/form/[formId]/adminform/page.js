@@ -17,6 +17,8 @@ const generateClientId = () => {
   return id;
 };
 
+const EMPTY_TICKET = { enabled: false, eventName: "", date: "", time: "", venue: "", notes: "" };
+
 export default function FormAdminBuilder() {
   const router = useRouter();
   const params = useParams();
@@ -30,6 +32,7 @@ export default function FormAdminBuilder() {
     coverImage: "",
     isActive: false,
     isClosed: true,
+    ticket: EMPTY_TICKET,
     questions: [
       {
         id: "Name",
@@ -56,7 +59,7 @@ export default function FormAdminBuilder() {
       const draft = localStorage.getItem("newFormDraft");
 
       if (draft) {
-        setForm(JSON.parse(draft));
+        setForm((prev) => ({ ...prev, ...JSON.parse(draft) }));
         localStorage.removeItem("newFormDraft");
       }
 
@@ -101,6 +104,7 @@ export default function FormAdminBuilder() {
           coverImage: data.coverImage || "",
           isActive: data.isActive !== undefined ? data.isActive : false,
           isClosed: data.isClosed !== undefined ? data.isClosed : true,
+          ticket: { ...EMPTY_TICKET, ...(data.ticket || {}) },
           questions: data.questions?.map((q) => ({
             id: q.id || generateClientId(),
             type: q.type,
@@ -162,6 +166,10 @@ export default function FormAdminBuilder() {
       setCoverImageError("");
     }
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateTicket = (field, value) => {
+    setForm((prev) => ({ ...prev, ticket: { ...prev.ticket, [field]: value } }));
   };
 
   const handleCoverUpload = (e) => {
@@ -318,6 +326,7 @@ export default function FormAdminBuilder() {
           questions: form.questions,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          ticket: form.ticket,
           updatedAt: new Date().toISOString(),
         });
 
@@ -331,6 +340,7 @@ export default function FormAdminBuilder() {
           coverImage: coverImageUrl,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          ticket: form.ticket,
           createdBy: user.uid,
         });
 
@@ -375,6 +385,7 @@ export default function FormAdminBuilder() {
           coverImage: "",
           isActive: false,
           isClosed: true,
+          ticket: EMPTY_TICKET,
           questions: [
             {
               id: generateClientId(),
@@ -861,6 +872,50 @@ export default function FormAdminBuilder() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Ticket */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">E-Ticket</h2>
+                <p className="text-sm text-gray-500">Email each respondent a QR ticket (PDF) after they submit. Check people in at /ctrlpanel/tickets.</p>
+              </div>
+              <button
+                onClick={() => updateTicket("enabled", !form.ticket.enabled)}
+                className={`relative w-12 h-6 flex-shrink-0 rounded-full transition-all duration-300 ${form.ticket.enabled ? "bg-green-500" : "bg-gray-300"}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.ticket.enabled ? "left-6" : "left-0.5"}`} />
+              </button>
+            </div>
+
+            {form.ticket.enabled && (
+              <div className="grid gap-4 sm:grid-cols-2 mt-5">
+                {[
+                  ["eventName", "Event name", form.title],
+                  ["venue", "Venue", "Venue name and address"],
+                  ["date", "Date", "Sat, 15 Nov 2026"],
+                  ["time", "Time", "14:00 - 17:00"],
+                  ["notes", "Extra note on ticket (optional)", "e.g. Bring your student ID"],
+                ].map(([key, label, placeholder]) => (
+                  <div key={key} className={key === "notes" ? "sm:col-span-2" : ""}>
+                    <label className="block text-sm text-gray-500 mb-2">{label}</label>
+                    <input
+                      type="text"
+                      value={form.ticket[key] || ""}
+                      onChange={(e) => updateTicket(key, e.target.value)}
+                      placeholder={placeholder}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                    />
+                  </div>
+                ))}
+                <p className="sm:col-span-2 text-xs text-gray-400">
+                  The form&apos;s Cover Image (below) is shown on the ticket. Use Latin letters only in these fields (the PDF font can&apos;t show Chinese characters). A question labelled &quot;Name&quot; or &quot;Nama&quot; is used as the name on the ticket.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
