@@ -72,37 +72,6 @@ export default function Home() {
 						quality={75}
 					/>
 
-					{/* OPEN RECRUITMENT SPECIAL */}
-					<div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4">
-						{/* "Join Us Now!" text with animation */}
-						<p className="text-white/80 font-extrabold text-sm md:text-base uppercase tracking-[0.3em] mb-4 animate-pulse font-light">
-							Join Us Now!
-						</p>
-
-						{/* Main Button */}
-						<Link
-							href="/oprec"
-							className="group relative px-8 py-4 md:px-12 md:py-5 overflow-hidden rounded-full
-							bg-gradient-to-r from-red-600 via-orange-400 to-red-600
-							bg-[length:200%_100%] animate-shimmer
-							hover:shadow-2xl hover:shadow-orange-500/30
-							transform transition-all duration-300 hover:scale-105
-							border border-white/20"
-						>
-							{/* Button background glow effect */}
-							<span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
-
-							{/* Button text */}
-							<span className="relative text-white font-bold text-xl md:text-2xl tracking-wider drop-shadow-lg">
-								Open Recruitment
-							</span>
-						</Link>
-
-						{/* Decorative line under button */}
-						<div className="w-12 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent mt-6"></div>
-					</div>
-
-
 					<div className="absolute inset-x-0 bottom-10 flex flex-col items-center z-10">
 						<Link
 							href="#about-us"
