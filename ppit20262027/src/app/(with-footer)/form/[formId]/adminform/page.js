@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../../../lib/firebase";
 import { useParams } from "next/navigation";
 import { createForm } from "../../../../../services/forms";
-import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle, Eye as EyeIcon, EyeOff as EyeOffIcon, FilePlus, GitBranch, GripHorizontal } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle, Eye as EyeIcon, EyeOff as EyeOffIcon, FilePlus, GitBranch, GripHorizontal, TriangleAlert } from "lucide-react";
 import { PAGE, SUBMIT, splitPages } from "../../../../../lib/forms/pages";
 
 // Must be unique across sessions: page jumps reference question ids
@@ -549,10 +549,14 @@ export default function FormAdminBuilder() {
   ];
 
   const pageNumbers = {};
+  const sharedBranching = new Set(); // branching questions that share a page with another one
   splitPages(form.questions).forEach((p, i) => {
     if (p.id) pageNumbers[p.id] = i + 1;
+    const branching = p.questions.filter((q) => q.type === "radio" && q.goTo);
+    if (branching.length > 1) branching.forEach((q) => sharedBranching.add(q.id));
   });
   const hasPages = Object.keys(pageNumbers).length > 0;
+  const pageLabelClass = "px-2 text-white text-lg font-bold uppercase tracking-wider";
 
   // Where a page / answer can send the respondent: only pages further down
   const jumpTargets = (fromIndex) => [
@@ -1077,22 +1081,23 @@ export default function FormAdminBuilder() {
           }}
         >
           {hasPages && form.questions[0]?.type !== PAGE && (
-            <div className="text-white/80 text-sm font-semibold uppercase tracking-wider px-2">Page 1</div>
+            <div className={pageLabelClass}>Page 1</div>
           )}
           {form.questions.map((question, index) => question.type === PAGE ? (
+            <Fragment key={question.id}>
+            {/* Page indicator sits outside the card so pages read as sections */}
+            <div className={index > 0 ? "pt-8 space-y-4" : ""}>
+              {index > 0 && <div className="border-t-2 border-dashed border-white/40" />}
+              <div className={pageLabelClass}>Page {pageNumbers[question.id]}</div>
+            </div>
             <div
-              key={question.id}
               {...dropTargetProps(index)}
-              className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-8 border-gray-800 mt-10 transition-opacity ${dragIndex === index ? "opacity-40" : ""}`}
+              className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-8 border-gray-800 transition-opacity ${dragIndex === index ? "opacity-40" : ""}`}
             >
               <div {...dragHandleProps(index)}>
                 <GripHorizontal size={18} />
               </div>
               <div className="px-6 pb-6 pt-2 space-y-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  <FilePlus size={14} />
-                  Page {pageNumbers[question.id]}
-                </div>
                 <input
                   type="text"
                   value={question.label}
@@ -1144,6 +1149,7 @@ export default function FormAdminBuilder() {
                 </p>
               </div>
             </div>
+            </Fragment>
           ) : (
             <div
               key={question.id}
@@ -1246,6 +1252,15 @@ export default function FormAdminBuilder() {
                       <Plus size={16} />
                       Add Option
                     </button>
+                  </div>
+                )}
+
+                {question.goTo && sharedBranching.has(question.id) && (
+                  <div className="flex items-start gap-2 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                    <TriangleAlert size={16} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Another question on this page also chooses the next page. If both send the respondent somewhere, the lowest one on the page wins.
+                    </span>
                   </div>
                 )}
 

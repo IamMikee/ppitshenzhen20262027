@@ -9,7 +9,8 @@
   - page.next          where to go after this page ("" = next page, a page id, or SUBMIT)
   - radio.goTo[i]      where to go if option i is picked (same values as page.next);
                        overrides page.next. If several radios on a page branch,
-                       the last answered one wins.
+                       the lowest one on the page whose picked option has a jump wins
+                       (an option set to "" never overrides).
   Only forward jumps are followed, so a form can never loop.
 */
 
