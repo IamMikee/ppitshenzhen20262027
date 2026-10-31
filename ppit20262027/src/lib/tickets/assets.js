@@ -16,7 +16,7 @@ export function eventFromForm(form) {
   };
 }
 
-async function fetchCover(url) {
+export async function fetchCover(url) {
   if (!url) return null;
   try {
     const res = await fetch(coverThumbUrl(url, 300), { signal: AbortSignal.timeout(8000) });
@@ -28,13 +28,14 @@ async function fetchCover(url) {
   }
 }
 
-export async function buildTicketFiles(ticket, event) {
+// Pass `cover` (from fetchCover) when building many tickets so it is downloaded once.
+export async function buildTicketFiles(ticket, event, cover) {
   const qrPng = await QRCode.toBuffer(ticketQrPayload(ticket.code), { errorCorrectionLevel: "M", margin: 1, width: 600 });
   const pdf = await renderTicketPdf({
     ticket,
     event,
     qrDataUrl: `data:image/png;base64,${qrPng.toString("base64")}`,
-    cover: await fetchCover(event.coverImage),
+    cover: cover === undefined ? await fetchCover(event.coverImage) : cover,
   });
   return { qrPng, pdf };
 }

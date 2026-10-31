@@ -27,6 +27,7 @@ export async function GET(req) {
           const t = d.data();
           return {
             code: t.code,
+            uid: t.uid,
             name: t.name,
             email: t.email,
             registeredAt: millis(t.createdAt),

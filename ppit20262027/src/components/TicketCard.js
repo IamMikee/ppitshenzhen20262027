@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
-import { ArrowLeft, AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle, Clock, RefreshCw } from "lucide-react";
 import { auth } from "../lib/firebase";
 import { coverThumbUrl } from "../lib/tickets/cover";
 
@@ -21,7 +21,7 @@ async function authedFetch(url, options = {}) {
 
 const requestTicket = async (formId, resend = false) =>
   (
-    await authedFetch("/api/tickets/issue", {
+    await authedFetch("/api/tickets/mine", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ formId, resend }),
@@ -37,7 +37,7 @@ function Field({ label, value }) {
   );
 }
 
-/* Issues (first time) or re-shows the logged-in user's ticket for a ticketed form. */
+/* Shows the logged-in user's ticket for a ticketed form, or that it hasn't been issued yet. */
 export default function TicketCard({ formId, heading, onBack }) {
   const [ticket, setTicket] = useState(null);
   const [error, setError] = useState("");
@@ -89,6 +89,30 @@ export default function TicketCard({ formId, heading, onBack }) {
           <span className="font-medium">My Ticket</span>
         </button>
 
+        {ticket && ticket.status !== "issued" && (
+          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+            {ticket.status === "pending" ? (
+              <>
+                <Clock size={40} className="text-[#7E0C0E] mx-auto mb-3" />
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Registration received</h2>
+                <p className="text-gray-600 text-sm mb-1">
+                  The committee is reviewing registrations for {ticket.event?.eventName || heading}.
+                </p>
+                <p className="text-gray-400 text-sm">Once approved, your ticket will be emailed to you and shown on this page.</p>
+              </>
+            ) : (
+              <>
+                <AlertCircle size={40} className="text-gray-400 mx-auto mb-3" />
+                <h2 className="text-xl font-bold text-gray-900 mb-2">No ticket for this event</h2>
+                <p className="text-gray-600 text-sm">
+                  Unfortunately we couldn&apos;t offer you a ticket for {ticket.event?.eventName || heading}. If you think
+                  this is a mistake, please contact PPIT Shenzhen.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {!ticket && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
             {busy ? (
@@ -112,7 +136,7 @@ export default function TicketCard({ formId, heading, onBack }) {
           </div>
         )}
 
-        {ticket && (
+        {ticket?.status === "issued" && (
           <>
             <div className="bg-white rounded-2xl shadow-2xl">
               <div className="px-6 pt-6 pb-2">
@@ -175,18 +199,22 @@ export default function TicketCard({ formId, heading, onBack }) {
                   A copy was emailed to <span className="text-white">{ticket.email}</span>. Check your spam folder if you
                   can&apos;t find it.
                 </p>
+              ) : ticket.emailStatus === "pending" ? (
+                <p>A copy is on its way to <span className="text-white">{ticket.email}</span>.</p>
               ) : (
                 <p className="text-amber-200">We couldn&apos;t email your ticket yet. Download or screenshot it instead.</p>
               )}
               {ticket.emailError && <p className="text-amber-200 mt-1">{ticket.emailError}</p>}
               {error && <p className="text-amber-200 mt-1">{error}</p>}
-              <button
-                onClick={() => load(true)}
-                disabled={busy}
-                className="mt-2 inline-flex items-center gap-1.5 font-semibold text-white hover:underline disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={busy ? "animate-spin" : ""} /> Resend email
-              </button>
+              {ticket.emailStatus !== "pending" && (
+                <button
+                  onClick={() => load(true)}
+                  disabled={busy}
+                  className="mt-2 inline-flex items-center gap-1.5 font-semibold text-white hover:underline disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={busy ? "animate-spin" : ""} /> Resend email
+                </button>
+              )}
             </div>
           </>
         )}
