@@ -5,7 +5,20 @@ import { collection, getDocs, doc, getDoc, query, orderBy } from "firebase/fires
 import { db, auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter, useParams } from "next/navigation"
-import { ChevronLeft, ChevronRight, List, LayoutGrid, Calendar, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, LayoutGrid, Calendar, Clock, Ticket } from "lucide-react";
+
+async function ticketApi(path, { method = "GET", body } = {}) {
+    await auth.authStateReady();
+    const token = await auth.currentUser?.getIdToken();
+    const res = await fetch(path, {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    return data;
+}
 
 export default function ResponsesPage() {
     const [responses, setResponses] = useState([]);
@@ -15,6 +28,11 @@ export default function ResponsesPage() {
     const [viewMode, setViewMode] = useState("perSubmission");
     const [currentIndex, setCurrentIndex] = useState(0);
     const [inputValue, setInputValue] = useState("");
+    const [ticketEnabled, setTicketEnabled] = useState(false);
+    const [ticketsByUid, setTicketsByUid] = useState(null);
+    const [issuing, setIssuing] = useState(false);
+    const [ticketMsg, setTicketMsg] = useState("");
+    const [reviewingId, setReviewingId] = useState(null);
     const router = useRouter();
     const formId = useParams()?.formId;
 
@@ -91,9 +109,11 @@ export default function ResponsesPage() {
                             type: key[1].type || "",
                         };
                     })
-                    .filter(q => q !== null);
+                    // Page breaks aren't questions
+                    .filter(q => q !== null && q.type !== "page");
 
                 setQuestions(questionList);
+                setTicketEnabled(data.ticket?.enabled === true);
             } catch (err) {
                 console.error(err);
             }
@@ -103,6 +123,99 @@ export default function ResponsesPage() {
             fetchForm();
         }
     }, [formId]);
+
+    /* =========================
+       TICKETS (ticketed forms only)
+    ========================= */
+    const loadTickets = async () => {
+        try {
+            const { attendees } = await ticketApi(`/api/tickets/check-in?formId=${encodeURIComponent(formId)}`);
+            setTicketsByUid(Object.fromEntries(attendees.map((a) => [a.uid, a])));
+        } catch (err) {
+            setTicketMsg(err.message);
+        }
+    };
+
+    useEffect(() => {
+        if (ticketEnabled && formId) loadTickets();
+    }, [ticketEnabled, formId]);
+
+    const setDeclined = async (res, declined) => {
+        setReviewingId(res.id);
+        try {
+            await ticketApi("/api/tickets/review", { method: "POST", body: { formId, responseId: res.id, declined } });
+            setResponses((prev) => prev.map((r) => (r.id === res.id ? { ...r, ticketDeclined: declined } : r)));
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setReviewingId(null);
+        }
+    };
+
+    const tickets = Object.values(ticketsByUid || {});
+    const hasTicket = (res) => !!ticketsByUid?.[res.submittedBy];
+    const toIssue = new Set(responses.filter((r) => !r.ticketDeclined && !hasTicket(r)).map((r) => r.submittedBy)).size;
+    const declinedCount = responses.filter((r) => r.ticketDeclined && !hasTicket(r)).length;
+    const unsentCount = tickets.filter((t) => t.emailStatus === "pending").length;
+    const failedCount = tickets.filter((t) => t.emailStatus === "failed").length;
+
+    // The server emails in chunks, so keep calling until nothing is left (or nothing moved).
+    const issueTickets = async (retryFailed = false) => {
+        if (
+            !retryFailed &&
+            toIssue > 0 &&
+            !confirm(`Issue tickets to ${toIssue} ${toIssue === 1 ? "person" : "people"} and email them now?\n\n${declinedCount} declined ${declinedCount === 1 ? "response" : "responses"} won't get one. People who register later can be issued in another run.`)
+        ) return;
+
+        setIssuing(true);
+        setTicketMsg("Issuing tickets...");
+        const total = { issued: 0, sent: 0, failed: 0 };
+        try {
+            let data;
+            let first = true;
+            do {
+                data = await ticketApi("/api/tickets/issue", { method: "POST", body: { formId, retryFailed: retryFailed && first } });
+                first = false;
+                total.issued += data.issued;
+                total.sent += data.sent;
+                total.failed += data.failed;
+                setTicketMsg(`Emailing tickets... ${total.sent} sent, ${data.remaining} to go. Keep this page open.`);
+            } while (data.remaining > 0 && data.sent + data.failed > 0);
+            setTicketMsg(`Done. ${total.issued} issued, ${total.sent} emailed${total.failed ? `, ${total.failed} failed` : ""}.`);
+        } catch (err) {
+            setTicketMsg(`Stopped: ${err.message} Press the button again to continue.`);
+        } finally {
+            setIssuing(false);
+            loadTickets();
+        }
+    };
+
+    const renderTicketStatus = (res) => {
+        if (!ticketEnabled || !ticketsByUid) return null;
+        const t = ticketsByUid[res.submittedBy];
+        if (t) {
+            return (
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
+                    Ticket {t.code}
+                    {t.emailStatus === "failed" ? " · email failed" : t.emailStatus === "pending" ? " · not emailed yet" : ""}
+                </span>
+            );
+        }
+        return (
+            <span className="flex items-center gap-2">
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${res.ticketDeclined ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                    {res.ticketDeclined ? "Declined" : "Awaiting ticket"}
+                </span>
+                <button
+                    onClick={() => setDeclined(res, !res.ticketDeclined)}
+                    disabled={reviewingId === res.id || issuing}
+                    className="text-xs text-gray-500 hover:text-[#7E0C0E] underline disabled:opacity-50"
+                >
+                    {res.ticketDeclined ? "Undo decline" : "Decline"}
+                </button>
+            </span>
+        );
+    };
 
     const escapeCSV = (value) => {
         if (value === null || value === undefined) return "";
@@ -361,6 +474,45 @@ export default function ResponsesPage() {
                     </div>
                 </div>
 
+                {ticketEnabled && (
+                    <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                    <Ticket size={18} /> E-Tickets
+                                </h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    {ticketsByUid
+                                        ? `${tickets.length} issued · ${toIssue} awaiting · ${declinedCount} declined${unsentCount ? ` · ${unsentCount} not emailed yet` : ""}`
+                                        : "Loading tickets..."}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => issueTickets()}
+                                disabled={!ticketsByUid || issuing || (toIssue === 0 && unsentCount === 0)}
+                                className="bg-[#7E0C0E] text-white px-4 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {issuing
+                                    ? "Working..."
+                                    : toIssue > 0
+                                        ? `Issue ${toIssue} ${toIssue === 1 ? "ticket" : "tickets"}`
+                                        : unsentCount > 0
+                                            ? `Send ${unsentCount} pending ${unsentCount === 1 ? "email" : "emails"}`
+                                            : "All tickets issued"}
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-3">
+                            Nobody gets a ticket until you press Issue. Everyone is included unless you mark their response Declined below.
+                        </p>
+                        {failedCount > 0 && !issuing && (
+                            <button onClick={() => issueTickets(true)} className="mt-2 text-sm text-red-600 hover:underline">
+                                {failedCount} {failedCount === 1 ? "email" : "emails"} failed. Retry
+                            </button>
+                        )}
+                        {ticketMsg && <p className="text-sm text-gray-700 mt-3">{ticketMsg}</p>}
+                    </div>
+                )}
+
                 {responses.length === 0 ? (
                     <div className="bg-white rounded-2xl shadow-sm p-12 text-center">
                         <p className="text-gray-500 text-lg">No responses yet.</p>
@@ -399,9 +551,12 @@ export default function ResponsesPage() {
                                                 <ChevronRight size={20} className="text-gray-700" />
                                             </button>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                                            <Calendar size={16} />
-                                            <span>Submitted: {formatDate(currentResponse?.submittedAt)}</span>
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            {currentResponse && renderTicketStatus(currentResponse)}
+                                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                <Calendar size={16} />
+                                                <span>Submitted: {formatDate(currentResponse?.submittedAt)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -439,9 +594,12 @@ export default function ResponsesPage() {
                                                 <span className="font-semibold text-gray-700">
                                                     Response #{responseNumber}
                                                 </span>
-                                                <div className="flex items-center gap-2 text-sm text-gray-500">
-                                                    <Clock size={14} />
-                                                    <span>{formatDate(res.submittedAt)}</span>
+                                                <div className="flex flex-wrap items-center gap-4">
+                                                    {renderTicketStatus(res)}
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                        <Clock size={14} />
+                                                        <span>{formatDate(res.submittedAt)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="p-6">

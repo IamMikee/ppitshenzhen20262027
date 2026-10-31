@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -8,14 +8,14 @@ import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../../../lib/firebase";
 import { useParams } from "next/navigation";
 import { createForm } from "../../../../../services/forms";
-import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle, Eye as EyeIcon, EyeOff as EyeOffIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Plus, Save, Eye, EyeOff, ArrowLeft, XCircle, CheckCircle, Eye as EyeIcon, EyeOff as EyeOffIcon, FilePlus, GitBranch, GripHorizontal, TriangleAlert } from "lucide-react";
+import { PAGE, SUBMIT, splitPages } from "../../../../../lib/forms/pages";
 
-let clientIdCounter = 1;
-const generateClientId = () => {
-  const id = `client-id-${clientIdCounter}`;
-  clientIdCounter++;
-  return id;
-};
+// Must be unique across sessions: page jumps reference question ids
+const generateClientId = () =>
+  `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const EMPTY_TICKET = { enabled: false, eventName: "", date: "", time: "", venue: "", notes: "" };
 
 export default function FormAdminBuilder() {
   const router = useRouter();
@@ -30,6 +30,7 @@ export default function FormAdminBuilder() {
     coverImage: "",
     isActive: false,
     isClosed: true,
+    ticket: EMPTY_TICKET,
     questions: [
       {
         id: "Name",
@@ -50,13 +51,16 @@ export default function FormAdminBuilder() {
   const [saving, setSaving] = useState(false);
   const [descriptionText, setDescriptionText] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [dragIndex, setDragIndex] = useState(null);
+  // Insertion point (0..questions.length) the dragged card would land at
+  const [dropIndex, setDropIndex] = useState(null);
 
   useEffect(() => {
     if (formId === "new") {
       const draft = localStorage.getItem("newFormDraft");
 
       if (draft) {
-        setForm(JSON.parse(draft));
+        setForm((prev) => ({ ...prev, ...JSON.parse(draft) }));
         localStorage.removeItem("newFormDraft");
       }
 
@@ -101,6 +105,7 @@ export default function FormAdminBuilder() {
           coverImage: data.coverImage || "",
           isActive: data.isActive !== undefined ? data.isActive : false,
           isClosed: data.isClosed !== undefined ? data.isClosed : true,
+          ticket: { ...EMPTY_TICKET, ...(data.ticket || {}) },
           questions: data.questions?.map((q) => ({
             id: q.id || generateClientId(),
             type: q.type,
@@ -108,6 +113,9 @@ export default function FormAdminBuilder() {
             required: q.required || false,
             options: q.options || [],
             imageUrl: q.imageUrl || "",
+            description: q.description || "",
+            next: q.next || "",
+            goTo: Array.isArray(q.goTo) ? q.goTo : null,
           })) || [],
         });
 
@@ -164,6 +172,10 @@ export default function FormAdminBuilder() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateTicket = (field, value) => {
+    setForm((prev) => ({ ...prev, ticket: { ...prev.ticket, [field]: value } }));
+  };
+
   const handleCoverUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -190,10 +202,54 @@ export default function FormAdminBuilder() {
     setForm({ ...form, questions: [...form.questions, newQuestion] });
   };
 
+  const addNewPage = () => {
+    const newPage = {
+      id: generateClientId(),
+      type: PAGE,
+      label: "",
+      description: "",
+      next: "",
+      required: false,
+      options: [],
+      imageUrl: "",
+    };
+    setForm({ ...form, questions: [...form.questions, newPage] });
+  };
+
   const deleteQuestion = (questionId) => {
+    // Jumps to a deleted page fall back to "next page"
+    const clearRef = (target) => (target === questionId ? "" : target);
     setForm({
       ...form,
-      questions: form.questions.filter((q) => q.id !== questionId),
+      questions: form.questions
+        .filter((q) => q.id !== questionId)
+        .map((q) => ({
+          ...q,
+          next: clearRef(q.next || ""),
+          goTo: q.goTo ? q.goTo.map(clearRef) : null,
+        })),
+    });
+  };
+
+  const toggleBranching = (questionId) => {
+    setForm({
+      ...form,
+      questions: form.questions.map((q) =>
+        q.id === questionId
+          ? { ...q, goTo: q.goTo ? null : q.options.map(() => "") }
+          : q
+      ),
+    });
+  };
+
+  const updateGoTo = (questionId, optionIndex, target) => {
+    setForm({
+      ...form,
+      questions: form.questions.map((q) =>
+        q.id === questionId
+          ? { ...q, goTo: q.goTo.map((t, idx) => (idx === optionIndex ? target : t)) }
+          : q
+      ),
     });
   };
 
@@ -215,7 +271,7 @@ export default function FormAdminBuilder() {
         let imageUrl = q.imageUrl || "";
         if (["text", "textarea", "file", "info"].includes(newType)) newOptions = [];
         else if (["radio", "checkbox"].includes(newType)) newOptions = ["Option 1"];
-        return { ...q, type: newType, options: newOptions, label: newType === "image" ? "" : q.label, imageUrl };
+        return { ...q, type: newType, options: newOptions, label: newType === "image" ? "" : q.label, imageUrl, goTo: null };
       }),
     });
   };
@@ -225,7 +281,7 @@ export default function FormAdminBuilder() {
       ...form,
       questions: form.questions.map((q) =>
         q.id === questionId
-          ? { ...q, options: [...q.options, `Option ${q.options.length + 1}`] }
+          ? { ...q, options: [...q.options, `Option ${q.options.length + 1}`], goTo: q.goTo ? [...q.goTo, ""] : null }
           : q
       ),
     });
@@ -236,7 +292,11 @@ export default function FormAdminBuilder() {
       ...form,
       questions: form.questions.map((q) =>
         q.id === questionId
-          ? { ...q, options: q.options.filter((_, idx) => idx !== optionIndex) }
+          ? {
+            ...q,
+            options: q.options.filter((_, idx) => idx !== optionIndex),
+            goTo: q.goTo ? q.goTo.filter((_, idx) => idx !== optionIndex) : null,
+          }
           : q
       ),
     });
@@ -253,16 +313,90 @@ export default function FormAdminBuilder() {
     });
   };
 
-  const moveQuestion = (index, direction) => {
+  // Jumps must point to a page break further down; the form ignores backward ones
+  const countBackwardJumps = (questions) => {
+    const position = new Map(questions.map((q, i) => [q.id, i]));
+    return questions.reduce(
+      (count, q, i) =>
+        count + [q.next, ...(q.goTo || [])].filter((t) => position.has(t) && position.get(t) <= i).length,
+      0
+    );
+  };
+
+  // `to` is an insertion index in the current list
+  const movedQuestions = (from, to) => {
     const newQuestions = [...form.questions];
-    const targetIndex = index + direction;
+    const [moved] = newQuestions.splice(from, 1);
+    newQuestions.splice(to > from ? to - 1 : to, 0, moved);
+    return newQuestions;
+  };
 
-    if (targetIndex < 0 || targetIndex >= newQuestions.length) return;
+  const isNoopMove = (from, to) => from === to || from + 1 === to;
 
-    [newQuestions[index], newQuestions[targetIndex]] =
-      [newQuestions[targetIndex], newQuestions[index]];
+  // Compared to the current count so forms saved with broken jumps can still be fixed
+  const breaksJump = (from, to) =>
+    countBackwardJumps(movedQuestions(from, to)) > countBackwardJumps(form.questions);
 
-    setForm({ ...form, questions: newQuestions });
+  const canMove = (from, to) =>
+    to >= 0 && to <= form.questions.length && !isNoopMove(from, to) && !breaksJump(from, to);
+
+  const moveQuestion = (from, to) => {
+    if (canMove(from, to)) setForm({ ...form, questions: movedQuestions(from, to) });
+  };
+
+  const moveButtonProps = (from, to) => {
+    const atEdge = to < 0 || to > form.questions.length;
+    const blocked = !atEdge && breaksJump(from, to);
+    return {
+      onClick: () => moveQuestion(from, to),
+      disabled: atEdge || blocked,
+      title: blocked ? "Can't move here: a page jump would point backwards" : undefined,
+      className: "p-1 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
+    };
+  };
+
+  const endDrag = () => {
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  const dragHandleProps = (index) => ({
+    draggable: true,
+    title: "Drag to reorder",
+    onDragStart: (e) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", form.questions[index].id);
+      const card = e.currentTarget.closest("[data-question-card]");
+      if (card) e.dataTransfer.setDragImage(card, card.offsetWidth / 2, 16);
+      setDragIndex(index);
+    },
+    onDragEnd: endDrag,
+    className: "flex justify-center pt-2 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing transition-colors",
+  });
+
+  const showDropLine = dragIndex !== null && dropIndex !== null && !isNoopMove(dragIndex, dropIndex);
+  // Red line = dropping here would break a page jump
+  const dropLineColor = showDropLine && breaksJump(dragIndex, dropIndex) ? "#f87171" : "#fff";
+
+  const dropTargetProps = (index) => {
+    const lineAbove = showDropLine && dropIndex === index;
+    const lineBelow = showDropLine && dropIndex === form.questions.length && index === form.questions.length - 1;
+    return {
+      "data-question-card": true,
+      onDragOver: (e) => {
+        if (dragIndex === null) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const target = e.clientY > rect.top + rect.height / 2 ? index + 1 : index;
+        e.dataTransfer.dropEffect = canMove(dragIndex, target) ? "move" : "none";
+        setDropIndex(target);
+      },
+      style: lineAbove
+        ? { boxShadow: `0 -12px 0 -8px ${dropLineColor}` }
+        : lineBelow
+          ? { boxShadow: `0 12px 0 -8px ${dropLineColor}` }
+          : undefined,
+    };
   };
 
   const saveForm = async () => {
@@ -318,6 +452,7 @@ export default function FormAdminBuilder() {
           questions: form.questions,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          ticket: form.ticket,
           updatedAt: new Date().toISOString(),
         });
 
@@ -331,6 +466,7 @@ export default function FormAdminBuilder() {
           coverImage: coverImageUrl,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          ticket: form.ticket,
           createdBy: user.uid,
         });
 
@@ -375,6 +511,7 @@ export default function FormAdminBuilder() {
           coverImage: "",
           isActive: false,
           isClosed: true,
+          ticket: EMPTY_TICKET,
           questions: [
             {
               id: generateClientId(),
@@ -409,6 +546,28 @@ export default function FormAdminBuilder() {
     { value: "file", label: "File Upload" },
     { value: "info", label: "Text Only (No Answer)" },
     { value: "image", label: "Image Display" },
+  ];
+
+  const pageNumbers = {};
+  const sharedBranching = new Set(); // branching questions that share a page with another one
+  splitPages(form.questions).forEach((p, i) => {
+    if (p.id) pageNumbers[p.id] = i + 1;
+    const branching = p.questions.filter((q) => q.type === "radio" && q.goTo);
+    if (branching.length > 1) branching.forEach((q) => sharedBranching.add(q.id));
+  });
+  const hasPages = Object.keys(pageNumbers).length > 0;
+  const pageLabelClass = "px-2 text-white text-lg font-bold uppercase tracking-wider";
+
+  // Where a page / answer can send the respondent: only pages further down
+  const jumpTargets = (fromIndex) => [
+    { value: "", label: "Continue to next page" },
+    ...form.questions
+      .filter((q, i) => q.type === PAGE && i > fromIndex)
+      .map((q) => ({
+        value: q.id,
+        label: `Go to Page ${pageNumbers[q.id]}${q.label ? `: ${q.label}` : ""}`,
+      })),
+    { value: SUBMIT, label: "Submit form" },
   ];
 
   const handleQuestionImageUpload = async (e, questionId) => {
@@ -864,14 +1023,143 @@ export default function FormAdminBuilder() {
           </div>
         </div>
 
+        {/* Ticket */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">E-Ticket</h2>
+                <p className="text-sm text-gray-500">Review respondents on the Responses page, then issue everyone&apos;s QR ticket (PDF, by email) at once. Check people in at /ctrlpanel/tickets.</p>
+              </div>
+              <button
+                onClick={() => updateTicket("enabled", !form.ticket.enabled)}
+                className={`relative w-12 h-6 flex-shrink-0 rounded-full transition-all duration-300 ${form.ticket.enabled ? "bg-green-500" : "bg-gray-300"}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.ticket.enabled ? "left-6" : "left-0.5"}`} />
+              </button>
+            </div>
+
+            {form.ticket.enabled && (
+              <div className="grid gap-4 sm:grid-cols-2 mt-5">
+                {[
+                  ["eventName", "Event name", form.title],
+                  ["venue", "Venue", "Venue name and address"],
+                  ["date", "Date", "Sat, 15 Nov 2026"],
+                  ["time", "Time", "14:00 - 17:00"],
+                  ["notes", "Extra note on ticket (optional)", "e.g. Bring your student ID"],
+                ].map(([key, label, placeholder]) => (
+                  <div key={key} className={key === "notes" ? "sm:col-span-2" : ""}>
+                    <label className="block text-sm text-gray-500 mb-2">{label}</label>
+                    <input
+                      type="text"
+                      value={form.ticket[key] || ""}
+                      onChange={(e) => updateTicket(key, e.target.value)}
+                      placeholder={placeholder}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                    />
+                  </div>
+                ))}
+                <p className="sm:col-span-2 text-xs text-gray-400">
+                  The form&apos;s Cover Image (below) is shown on the ticket. Use Latin letters only in these fields (the PDF font can&apos;t show Chinese characters). A question labelled &quot;Name&quot; or &quot;Nama&quot; is used as the name on the ticket.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Questions */}
-        <div className="space-y-4 mb-6">
-          {form.questions.map((question, index) => (
+        <div
+          className="space-y-4 mb-6"
+          onDragOver={(e) => {
+            // Keep the gaps between cards droppable too
+            if (dragIndex !== null) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragIndex !== null && dropIndex !== null) moveQuestion(dragIndex, dropIndex);
+            endDrag();
+          }}
+        >
+          {hasPages && form.questions[0]?.type !== PAGE && (
+            <div className={pageLabelClass}>Page 1</div>
+          )}
+          {form.questions.map((question, index) => question.type === PAGE ? (
+            <Fragment key={question.id}>
+            {/* Page indicator sits outside the card so pages read as sections */}
+            <div className={index > 0 ? "pt-8 space-y-4" : ""}>
+              {index > 0 && <div className="border-t-2 border-dashed border-white/40" />}
+              <div className={pageLabelClass}>Page {pageNumbers[question.id]}</div>
+            </div>
+            <div
+              {...dropTargetProps(index)}
+              className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-8 border-gray-800 transition-opacity ${dragIndex === index ? "opacity-40" : ""}`}
+            >
+              <div {...dragHandleProps(index)}>
+                <GripHorizontal size={18} />
+              </div>
+              <div className="px-6 pb-6 pt-2 space-y-4">
+                <input
+                  type="text"
+                  value={question.label}
+                  onChange={(e) => updateQuestion(question.id, "label", e.target.value)}
+                  placeholder="Page title (optional)"
+                  className="w-full text-xl font-semibold text-gray-800 border-0 border-b-2 border-transparent focus:border-[#7E0C0E] outline-none transition-all duration-200 px-2 py-1"
+                />
+                <textarea
+                  value={question.description || ""}
+                  onChange={(e) => updateQuestion(question.id, "description", e.target.value)}
+                  placeholder="Page description (optional) - use **bold**, *italic*, __underline__"
+                  rows={2}
+                  className="w-full text-gray-500 outline-none px-2 py-1 border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200 resize-y"
+                />
+
+                <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-2 text-sm text-gray-500">
+                    After this page
+                    <select
+                      value={question.next || ""}
+                      onChange={(e) => updateQuestion(question.id, "next", e.target.value)}
+                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                    >
+                      {jumpTargets(index).map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button
+                    onClick={() => deleteQuestion(question.id)}
+                    className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 transition-colors ml-auto"
+                  >
+                    <Trash2 size={16} />
+                    Delete Page Break
+                  </button>
+
+                  <div className="flex gap-1">
+                    <button {...moveButtonProps(index, index - 1)}>
+                      <ChevronUp size={18} />
+                    </button>
+                    <button {...moveButtonProps(index, index + 2)}>
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  &quot;After this page&quot; is the default. A Multiple Choice question on this page with &quot;Go to page based on answer&quot; overrides it.
+                </p>
+              </div>
+            </div>
+            </Fragment>
+          ) : (
             <div
               key={question.id}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200"
+              {...dropTargetProps(index)}
+              className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-[box-shadow,opacity] duration-200 ${dragIndex === index ? "opacity-40" : ""}`}
             >
-              <div className="p-6">
+              <div {...dragHandleProps(index)}>
+                <GripHorizontal size={18} />
+              </div>
+              <div className="px-6 pb-6 pt-2">
                 <div className="flex flex-wrap items-start gap-4 mb-4">
                   <div
                     contentEditable
@@ -934,6 +1222,17 @@ export default function FormAdminBuilder() {
                           className="flex-1 px-2 py-1 border-b border-gray-200 focus:border-[#7E0C0E] outline-none text-gray-700"
                           placeholder="Option"
                         />
+                        {question.type === "radio" && question.goTo && (
+                          <select
+                            value={question.goTo[idx] || ""}
+                            onChange={(e) => updateGoTo(question.id, idx, e.target.value)}
+                            className="max-w-[45%] px-2 py-1 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                          >
+                            {jumpTargets(index).map((t) => (
+                              <option key={t.value} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                        )}
                         <button
                           onClick={() => deleteOption(question.id, idx)}
                           disabled={question.options.length === 1}
@@ -953,6 +1252,15 @@ export default function FormAdminBuilder() {
                       <Plus size={16} />
                       Add Option
                     </button>
+                  </div>
+                )}
+
+                {question.goTo && sharedBranching.has(question.id) && (
+                  <div className="flex items-start gap-2 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                    <TriangleAlert size={16} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Another question on this page also chooses the next page. If both send the respondent somewhere, the lowest one on the page wins.
+                    </span>
                   </div>
                 )}
 
@@ -1025,6 +1333,19 @@ export default function FormAdminBuilder() {
                     </label>
                   )}
 
+                  {question.type === "radio" && hasPages && (
+                    <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!question.goTo}
+                        onChange={() => toggleBranching(question.id)}
+                        className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] rounded cursor-pointer"
+                      />
+                      <GitBranch size={14} />
+                      Go to page based on answer
+                    </label>
+                  )}
+
                   <button
                     onClick={() => deleteQuestion(question.id)}
                     className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 transition-colors ml-auto"
@@ -1034,18 +1355,10 @@ export default function FormAdminBuilder() {
                   </button>
 
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => moveQuestion(index, -1)}
-                      disabled={index === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
+                    <button {...moveButtonProps(index, index - 1)}>
                       <ChevronUp size={18} />
                     </button>
-                    <button
-                      onClick={() => moveQuestion(index, 1)}
-                      disabled={index === form.questions.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
+                    <button {...moveButtonProps(index, index + 2)}>
                       <ChevronDown size={18} />
                     </button>
                   </div>
@@ -1055,14 +1368,23 @@ export default function FormAdminBuilder() {
           ))}
         </div>
 
-        {/* Add Question Button */}
-        <button
-          onClick={addNewQuestion}
-          className="w-full bg-white text-gray-700 border-2 border-dashed border-gray-300 rounded-2xl py-4 hover:border-[#7E0C0E] hover:text-[#7E0C0E] transition-all duration-200 flex items-center justify-center gap-2 font-medium"
-        >
-          <Plus size={20} />
-          Add Question
-        </button>
+        {/* Add Question / Page Buttons */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            onClick={addNewQuestion}
+            className="w-full bg-white text-gray-700 border-2 border-dashed border-gray-300 rounded-2xl py-4 hover:border-[#7E0C0E] hover:text-[#7E0C0E] transition-all duration-200 flex items-center justify-center gap-2 font-medium"
+          >
+            <Plus size={20} />
+            Add Question
+          </button>
+          <button
+            onClick={addNewPage}
+            className="w-full bg-white text-gray-700 border-2 border-dashed border-gray-300 rounded-2xl py-4 hover:border-[#7E0C0E] hover:text-[#7E0C0E] transition-all duration-200 flex items-center justify-center gap-2 font-medium"
+          >
+            <FilePlus size={20} />
+            Add Page Break
+          </button>
+        </div>
       </div>
     </div>
   );

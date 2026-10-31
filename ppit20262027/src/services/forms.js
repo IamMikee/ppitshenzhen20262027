@@ -32,6 +32,7 @@ export async function createForm(formData) {
     coverImage: formData.coverImage || "",
     isActive: formData.isActive !== undefined ? formData.isActive : false,   // ✅ Use passed value
     isClosed: formData.isClosed !== undefined ? formData.isClosed : true,    // ✅ Use passed value
+    ticket: formData.ticket || null,
     createdBy: formData.createdBy,
     createdAt: serverTimestamp(),
   });
@@ -57,6 +58,7 @@ export async function getFormById(formId) {
     description: data.description,
     questions: data.questions,
     isActive: data.isActive,
+    ticket: data.ticket?.enabled ? { enabled: true } : null,
     createdBy: data.createdBy,
     // CONVERT TIMESTAMP
     createdAt: data.createdAt
@@ -183,7 +185,6 @@ export async function updateUser(
     birthday = "",
     cohortYear = null,
     submittedFormId = null,
-    attendedFormId = null,
   } = {}
 ) {
   const userRef = doc(db, "users", uid);
@@ -205,7 +206,7 @@ export async function updateUser(
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
       submittedForms: submittedFormId ? [submittedFormId] : [],
-      attendedForms: attendedFormId ? [attendedFormId] : [],
+      attendedForms: [],
     });
     return;
   }
@@ -222,9 +223,6 @@ export async function updateUser(
   if (cohortYear) updateData.cohortYear = parseInt(cohortYear);
   if (submittedFormId) {
     updateData.submittedForms = arrayUnion(submittedFormId);
-  }
-  if (attendedFormId) {
-    updateData.attendedForms = arrayUnion(attendedFormId);
   }
 
   await updateDoc(userRef, updateData);
@@ -366,50 +364,6 @@ export async function updateUserStatus() {
     throw error;
   }
 }
-
-/* =========================
-   MARK ATTENDANCE (USER)
-========================= */
-export async function markAttendance(formId) {
-
-  const userId = localStorage.getItem("user-id");
-  if (!userId) throw new Error("User not logged in");
-
-  // 🔹 GET USER DATA
-  const userSnap = await getDoc(doc(db, "users", userId));
-  if (!userSnap.exists()) throw new Error("User not found");
-
-  const userData = userSnap.data();
-  const userEmail = userData.email || "";
-  const userName = userData.name || "";
-
-  // 🔹 GET FORM DATA
-  const formSnap = await getDoc(doc(db, "forms", formId));
-  if (!formSnap.exists()) throw new Error("Form not found");
-
-  const formData = formSnap.data();
-  const formTitle = formData.title || "";
-
-  // 🔹 UPDATE FIRESTORE
-  await updateUser(userId, {
-    attendedFormId: formId,
-  });
-
-  // 🔹 UPDATE GOOGLE SHEETS
-  await fetch("https://script.google.com/macros/s/AKfycbzcLclk2Se9LlFIcLiCQUutSwaNqvNc_mXx35tpG4-Hy0i0a5rDvVYVMTYrG11L6lZu/exec", {
-    method: "POST",
-    body: JSON.stringify({
-      type: "attendance",
-      formId,
-      userId,
-      email: userEmail,
-      eventName: formTitle,
-      userName,
-      attendedAt: new Date().toISOString(),
-    }),
-  });
-}
-
 
 /* ==================
    HELPER FUNCTIONS
