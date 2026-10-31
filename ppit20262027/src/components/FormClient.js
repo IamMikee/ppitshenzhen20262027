@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { submitResponse } from "../services/forms";
 import TicketCard from "./TicketCard";
+import { splitPages, nextPageIndex, isAnswerable } from "../lib/forms/pages";
 import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,8 @@ export default function FormClient({ form }) {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [formClosed, setFormClosed] = useState(false);
   const [fileName, setFileName] = useState({});
+  // Stack of visited page indices; the last one is the page on screen
+  const [history, setHistory] = useState([0]);
   const router = useRouter();
 
   /* Auth check */
@@ -177,10 +180,21 @@ export default function FormClient({ form }) {
     );
   }
 
+  /* Pages */
+  const pages = splitPages(form.questions);
+  const pageIndex = history[history.length - 1];
+  const page = pages[pageIndex];
+  const nextIndex = nextPageIndex(pages, pageIndex, answers);
+  const isLastPage = nextIndex === -1;
+
+  // Questions on the pages this respondent actually went through
+  const visitedQuestions = () =>
+    history.flatMap((i) => pages[i].questions).filter(isAnswerable);
+
   /* Validation check */
-  const validateRequired = () => {
-    for (const q of form.questions) {
-      if (q.required && q.type !== "info") {
+  const validateRequired = (questions) => {
+    for (const q of questions) {
+      if (q.required && isAnswerable(q)) {
         const value = answers[q.id];
         if (
           value === undefined ||
@@ -194,15 +208,37 @@ export default function FormClient({ form }) {
     }
   };
 
+  const goToPage = (newHistory) => {
+    setHistory(newHistory);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleNext = () => {
+    try {
+      validateRequired(page.questions);
+      goToPage([...history, nextIndex]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleBack = () => goToPage(history.slice(0, -1));
+
   /* Submit */
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
-      validateRequired();
+      validateRequired(page.questions);
 
-      const processedAnswers = { ...answers };
+      // Drop answers from pages the respondent backed out of
+      const questions = visitedQuestions();
+      const processedAnswers = {};
+      for (const q of questions) {
+        if (answers[q.id] !== undefined) processedAnswers[q.id] = answers[q.id];
+      }
 
-      for (const q of form.questions) {
+      for (const q of questions) {
         if (q.type === "file" && answers[q.id]) {
           const file = answers[q.id];
 
@@ -238,7 +274,7 @@ export default function FormClient({ form }) {
         }
       }
 
-      await submitResponse(form.id, form.questions, processedAnswers);
+      await submitResponse(form.id, questions, processedAnswers);
 
       setSuccess(true);
       setError("");
@@ -269,9 +305,26 @@ export default function FormClient({ form }) {
           </div>
         </div>
 
+        {/* Page title (multi-page forms) */}
+        {pages.length > 1 && (page.title || page.description) && (
+          <div className="relative bg-white rounded-2xl shadow-sm overflow-hidden mb-3">
+            {/* Accent sits inside the card: a border would blend into the red page background */}
+            <div className="absolute left-3 inset-y-5 w-1.5 rounded-full bg-[#7E0C0E]" />
+            <div className="px-7 py-6">
+              {page.title && <h2 className="text-2xl font-bold text-gray-900">{page.title}</h2>}
+              {page.description && (
+                <div
+                  className="text-gray-600 text-sm mt-2 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: formatDescription(page.description) }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Question Cards - Each in its own box */}
         <div className="space-y-4 mt-3">
-          {form.questions.map((q, index) => (
+          {page.questions.map((q, index) => (
             <div key={q.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="px-7 py-9">
                 {/* Question Label - slightly smaller */}
@@ -428,8 +481,30 @@ export default function FormClient({ form }) {
           </div>
         )}
 
-        {/* Submit Button */}
-        <div className="mt-6 flex items-center gap-4 font-montserrat">
+        {/* Navigation + Submit Button */}
+        <div className="mt-6 flex flex-wrap items-center gap-4 font-montserrat">
+          {history.length > 1 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm text-white border-2 border-white/60 hover:bg-white/10 transition-all duration-200 disabled:opacity-50"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </button>
+          )}
+
+          {!isLastPage ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              className="flex items-center gap-2 bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm hover:bg-gray-100 hover:shadow-lg transition-all duration-200 active:scale-95 shadow-md group"
+            >
+              <span>Next</span>
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
+            </button>
+          ) : (
           <button
             type="button"
             onClick={handleSubmit}
@@ -465,6 +540,7 @@ export default function FormClient({ form }) {
               )}
             </span>
           </button>
+          )}
           <span className="text-xs text-white/70 font-medium">
             * Required fields
           </span>
