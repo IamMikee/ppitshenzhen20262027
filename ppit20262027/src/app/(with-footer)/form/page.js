@@ -162,8 +162,8 @@ export default function loadAllFormsPage(){
                             
                             <div style={{ position: "relative", height: "30vh", display: "flex", alignItems: "flex-end", justifyContent: "center", }}>
                                 {/* REGISTER BUTTON */}
-                                <button className="font-montserrat"
-                                    style={ buttonStyle } 
+                                <button className={`font-montserrat ${admin ? "transition hover:brightness-75" : ""}`}
+                                    style={ buttonStyle }
                                     onClick={() => {
                                         if (admin) {
                                             router.push(`form/${form.id}/adminform`);
@@ -185,7 +185,7 @@ export default function loadAllFormsPage(){
                                 {/* VIEW RESPONSES BUTTON (ADMIN ONLY) */}
                                 {admin && (
                                     <button 
-                                        className="font-montserrat ml-4"
+                                        className="font-montserrat ml-4 transition hover:brightness-75"
                                         style={ buttonStyle }
                                         onClick={() => router.push(`form/${form.id}/responses`)}
                                     > 
@@ -291,6 +291,7 @@ export default function loadAllFormsPage(){
             {admin && (
                 <div style={{ marginTop: "2rem", textAlign: "center" }}>
                     <button
+                    className="transition hover:brightness-75"
                     onClick={ async () => {
                         try {
                             const formData = {
