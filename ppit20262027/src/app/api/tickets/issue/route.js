@@ -13,7 +13,7 @@ const DELAY_BETWEEN_INDIVIDUAL = 3000;
 // Returned to the page, which waits this long before asking for the next batch.
 const DELAY_BETWEEN_BATCHES = 10000;
 // Stop starting new emails after this so the request finishes well inside maxDuration.
-const EMAIL_BUDGET_MS = 240 * 1000;
+const EMAIL_BUDGET_MS = 180 * 1000;
 // Two writes per ticket (ticket + holder); Firestore batches cap at 500 writes.
 const WRITES_PER_COMMIT = 200;
 
