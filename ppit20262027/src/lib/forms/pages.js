@@ -21,6 +21,11 @@ const NON_ANSWERABLE = ["info", "image", PAGE];
 
 export const isAnswerable = (q) => !NON_ANSWERABLE.includes(q.type);
 
+export const isBranching = (q) => q.type === "radio" && Array.isArray(q.goTo);
+
+// A branching radio left blank would silently fall through to the next page, so it's always required.
+export const isRequired = (q) => isAnswerable(q) && (!!q.required || isBranching(q));
+
 export function splitPages(questions = []) {
   const pages = [];
   let current = { id: null, title: "", description: "", next: "", questions: [] };
@@ -51,7 +56,7 @@ export function nextPageIndex(pages, index, answers) {
   let target = page.next || "";
 
   for (const q of page.questions) {
-    if (q.type !== "radio" || !Array.isArray(q.goTo)) continue;
+    if (!isBranching(q)) continue;
     const optionIndex = (q.options || []).indexOf(answers[q.id]);
     if (optionIndex !== -1 && q.goTo[optionIndex]) target = q.goTo[optionIndex];
   }

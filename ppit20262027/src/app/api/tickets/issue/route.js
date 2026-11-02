@@ -2,14 +2,22 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, requireAdmin, HttpError, generateTicketCode } from "@/lib/tickets/server";
 import { eventFromForm, buildTicketFiles, fetchCover } from "@/lib/tickets/assets";
-import { sendTicketEmail } from "@/lib/tickets/email";
+import { sendTicketEmail, createBulkTransport } from "@/lib/tickets/email";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
+// Gmail flags bursts as spam, so emails go out in small, spaced batches (same pacing as /api/emails/send).
+// Max emails per call (Gmail's limit is ~100, so never above 80). 40 x ~4.5s is about 3 minutes.
+const TICKETS_PER_BATCH = 40;
+const DELAY_BETWEEN_INDIVIDUAL = 3000;
+// Returned to the page, which waits this long before asking for the next batch.
+const DELAY_BETWEEN_BATCHES = 10000;
 // Stop starting new emails after this so the request finishes well inside maxDuration.
-const EMAIL_BUDGET_MS = 40 * 1000;
+const EMAIL_BUDGET_MS = 240 * 1000;
 // Two writes per ticket (ticket + holder); Firestore batches cap at 500 writes.
-const TICKETS_PER_BATCH = 200;
+const WRITES_PER_COMMIT = 200;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const stripHtml = (s) => String(s || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
 
@@ -41,9 +49,9 @@ async function issueMissingTickets(db, formId, form) {
 
   const users = await db.getAll(...todo.map((r) => db.collection("users").doc(r.data().submittedBy)));
 
-  for (let i = 0; i < todo.length; i += TICKETS_PER_BATCH) {
+  for (let i = 0; i < todo.length; i += WRITES_PER_COMMIT) {
     const batch = db.batch();
-    todo.slice(i, i + TICKETS_PER_BATCH).forEach((r, j) => {
+    todo.slice(i, i + WRITES_PER_COMMIT).forEach((r, j) => {
       const { submittedBy: uid, answers, userEmail } = r.data();
       const userDoc = users[i + j].data();
       const email = userEmail || userDoc?.email || "";
@@ -72,8 +80,9 @@ async function issueMissingTickets(db, formId, form) {
 
 /*
   POST { formId, retryFailed? }   (admin)
-  Issues tickets to everyone not declined, then emails pending tickets until the time budget
-  runs out. The page calls again while `remaining` > 0.
+  Issues tickets to everyone not declined, then emails up to TICKETS_PER_BATCH pending tickets,
+  spaced out to stay under Gmail's limits. The page waits `waitMs` and calls again while
+  `remaining` > 0.
 */
 export async function POST(req) {
   try {
@@ -106,24 +115,31 @@ export async function POST(req) {
     const started = Date.now();
     let sent = 0;
     let failed = 0;
+    const transport = createBulkTransport();
 
-    for (const doc of pending.docs) {
-      if (Date.now() - started > EMAIL_BUDGET_MS) break;
-      const ticket = doc.data();
-      try {
-        if (!ticket.email) throw new Error("No email address");
-        const { qrPng, pdf } = await buildTicketFiles(ticket, event, cover);
-        await sendTicketEmail({ to: ticket.email, ticket, event, qrPng, pdf });
-        await doc.ref.update({ emailStatus: "sent", emailSentAt: FieldValue.serverTimestamp(), emailError: null });
-        sent++;
-      } catch (err) {
-        console.error("[tickets/issue] email failed", ticket.code, err);
-        await doc.ref.update({ emailStatus: "failed", emailError: String(err.message || err).slice(0, 300) });
-        failed++;
+    try {
+      for (const [i, doc] of pending.docs.slice(0, TICKETS_PER_BATCH).entries()) {
+        if (Date.now() - started > EMAIL_BUDGET_MS) break;
+        if (i > 0) await sleep(DELAY_BETWEEN_INDIVIDUAL);
+        const ticket = doc.data();
+        try {
+          if (!ticket.email) throw new Error("No email address");
+          const { qrPng, pdf } = await buildTicketFiles(ticket, event, cover);
+          await sendTicketEmail({ to: ticket.email, ticket, event, qrPng, pdf, transport });
+          await doc.ref.update({ emailStatus: "sent", emailSentAt: FieldValue.serverTimestamp(), emailError: null });
+          sent++;
+        } catch (err) {
+          console.error("[tickets/issue] email failed", ticket.code, err);
+          await doc.ref.update({ emailStatus: "failed", emailError: String(err.message || err).slice(0, 300) });
+          failed++;
+        }
       }
+    } finally {
+      transport.close();
     }
 
-    return NextResponse.json({ issued, sent, failed, remaining: pending.size - sent - failed });
+    const remaining = pending.size - sent - failed;
+    return NextResponse.json({ issued, sent, failed, remaining, waitMs: remaining > 0 ? DELAY_BETWEEN_BATCHES : 0 });
   } catch (err) {
     if (err instanceof HttpError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("[tickets/issue]", err);

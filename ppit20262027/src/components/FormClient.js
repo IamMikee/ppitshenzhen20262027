@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { submitResponse } from "../services/forms";
 import TicketCard from "./TicketCard";
-import { splitPages, nextPageIndex, isAnswerable } from "../lib/forms/pages";
+import { splitPages, nextPageIndex, isAnswerable, isRequired } from "../lib/forms/pages";
 import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -194,7 +194,7 @@ export default function FormClient({ form }) {
   /* Validation check */
   const validateRequired = (questions) => {
     for (const q of questions) {
-      if (q.required && isAnswerable(q)) {
+      if (isRequired(q)) {
         const value = answers[q.id];
         if (
           value === undefined ||
@@ -335,7 +335,7 @@ export default function FormClient({ form }) {
                     dangerouslySetInnerHTML={{
                       __html: (q.type === "info"
                         ? `<span style="font-weight: 800; color: #6B7280; font-size: 15px;">${q.label}</span>`
-                        : q.label) + (q.required && q.type !== "info" ? ' <span style="color: #D32F2F;">*</span>' : '')
+                        : q.label) + (isRequired(q) ? ' <span style="color: #D32F2F;">*</span>' : '')
                     }}
                   />
                 </div>

@@ -7,13 +7,23 @@ const FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 const escapeHtml = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+const gmailAuth = () => ({ user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD });
+
 let transporter;
 function getTransporter() {
-  transporter ??= nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
-  });
+  transporter ??= nodemailer.createTransport({ service: "gmail", auth: gmailAuth() });
   return transporter;
+}
+
+// For bulk sends: one reused SMTP login instead of one per email. Call close() when done.
+export function createBulkTransport() {
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: gmailAuth(),
+    pool: true,
+    maxConnections: 1,
+    maxMessages: Infinity,
+  });
 }
 
 const field = (label, value) => `
@@ -76,7 +86,7 @@ function ticketHtml({ ticket, event }) {
 </table>`;
 }
 
-export async function sendTicketEmail({ to, ticket, event, qrPng, pdf }) {
+export async function sendTicketEmail({ to, ticket, event, qrPng, pdf, transport = getTransporter() }) {
   const text = `Hi ${ticket.name},
 
 You're registered for ${event.eventName}.
@@ -84,7 +94,7 @@ ${event.date ? `Date: ${event.date}\n` : ""}${event.time ? `Time: ${event.time}\
 Ticket code: ${ticket.code}
 Show the QR in the attached PDF at the entrance. Valid for one entry only.`;
 
-  await getTransporter().sendMail({
+  await transport.sendMail({
     from: `"PPIT Shenzhen" <${process.env.GMAIL_USER}>`,
     to,
     subject: `Your ticket: ${event.eventName} (${ticket.code})`,

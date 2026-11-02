@@ -168,7 +168,7 @@ export default function ResponsesPage() {
         ) return;
 
         setIssuing(true);
-        setTicketMsg("Issuing tickets...");
+        setTicketMsg("Issuing tickets... emails go out slowly to keep Gmail happy, so this can take a few minutes. Keep this page open.");
         const total = { issued: 0, sent: 0, failed: 0 };
         try {
             let data;
@@ -180,6 +180,8 @@ export default function ResponsesPage() {
                 total.sent += data.sent;
                 total.failed += data.failed;
                 setTicketMsg(`Emailing tickets... ${total.sent} sent, ${data.remaining} to go. Keep this page open.`);
+                // Pause between batches so Gmail doesn't see one long burst
+                if (data.remaining > 0 && data.waitMs) await new Promise((resolve) => setTimeout(resolve, data.waitMs));
             } while (data.remaining > 0 && data.sent + data.failed > 0);
             setTicketMsg(`Done. ${total.issued} issued, ${total.sent} emailed${total.failed ? `, ${total.failed} failed` : ""}.`);
         } catch (err) {

@@ -110,7 +110,7 @@ export default function FormAdminBuilder() {
             id: q.id || generateClientId(),
             type: q.type,
             label: q.label,
-            required: q.required || false,
+            required: q.required || Array.isArray(q.goTo),
             options: q.options || [],
             imageUrl: q.imageUrl || "",
             description: q.description || "",
@@ -236,7 +236,9 @@ export default function FormAdminBuilder() {
       ...form,
       questions: form.questions.map((q) =>
         q.id === questionId
-          ? { ...q, goTo: q.goTo ? null : q.options.map(() => "") }
+          ? q.goTo
+            ? { ...q, goTo: null }
+            : { ...q, goTo: q.options.map(() => ""), required: true }
           : q
       ),
     });
@@ -1322,12 +1324,16 @@ export default function FormAdminBuilder() {
                 {/* Bottom controls */}
                 <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-gray-100">
                   {!["info", "image"].includes(question.type) && (
-                    <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+                    <label
+                      className={`flex items-center gap-2 text-sm text-gray-500 ${question.goTo ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      title={question.goTo ? "Questions that pick the next page are always required" : undefined}
+                    >
                       <input
                         type="checkbox"
-                        checked={question.required}
+                        checked={question.required || !!question.goTo}
+                        disabled={!!question.goTo}
                         onChange={(e) => updateQuestion(question.id, "required", e.target.checked)}
-                        className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] rounded cursor-pointer"
+                        className="w-4 h-4 text-[#7E0C0E] focus:ring-[#7E0C0E] rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                       />
                       Required
                     </label>
