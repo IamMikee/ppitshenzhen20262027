@@ -246,11 +246,18 @@ export default function FormClient({ form }) {
   return (
     <div className="min-h-screen bg-[#7E0C0E] py-12 px-4 pt-24 font-montserrat">
       <div className="max-w-4xl mx-auto">
+        {/* banner */}
+        <div className="w-full h-48 md:h-64 rounded-2xl overflow-hidden border-2 border-white/20 mb-4 shadow-sm">
+          <img
+            src={form.coverImage || "/DefaultFormCardBackground.webp"}
+          className="w-full h-full object-cover"
+          />
+        </div>
         {/* Form Header Card - Single box with outline and white background */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-2 border-[#7E0C0E] mb-6">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-2 border-[#7E0C0E] mb-4">
           {/* Header with white background and black text */}
-          <div className="px-8 py-8 bg-white border-b border-gray-200">
-            <h1 className="text-4xl font-bold text-gray-900 text-center leading-snug tracking-tight mb-8">
+          <div className="px-8 py-6 bg-white border-b border-gray-200">
+            <h1 className="text-4xl font-bold text-gray-900 text-center leading-snug tracking-tight mb-4">
               {form.title}
             </h1>
             {form.description && (
@@ -367,7 +374,7 @@ export default function FormClient({ form }) {
                           onChange={() =>
                             setAnswers({ ...answers, [q.id]: opt })
                           }
-                          className="w-3.5 h-3.5 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 cursor-pointer"
+                          className="w-3.5 h-3.5 accent-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 cursor-pointer"
                         />
                         <span className="text-[15px] text-gray-700 group-hover:text-gray-900 transition-colors">
                           {opt}
@@ -400,7 +407,7 @@ export default function FormClient({ form }) {
                               };
                             });
                           }}
-                          className="w-3.5 h-3.5 text-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 rounded cursor-pointer"
+                          className="w-3.5 h-3.5 accent-[#7E0C0E] focus:ring-[#7E0C0E] focus:ring-offset-0 rounded cursor-pointer"
                         />
                         <span className="text-[15px] text-gray-700 group-hover:text-gray-900 transition-colors">
                           {opt}
