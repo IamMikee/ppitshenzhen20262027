@@ -21,14 +21,12 @@ function isDark(color) {
 
 export default function loadAllFormsPage(){
     const [forms, setForms] = useState([]);
-    const [activeQr, setActiveQr] = useState(null);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(undefined);
     const [admin, setAdmin] = useState(false);
     const [attendedForms, setAttendedForms] = useState([]);
     const [submittedForms, setSubmittedForms] = useState([]);
     const router = useRouter();
-    const getQrUrl = (qrContent) => `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrContent)}`;
     const activeForms = [];
 
     // GET USER AND FORMS DATA
@@ -163,29 +161,6 @@ export default function loadAllFormsPage(){
                             <div className="font-montserrat" style={{ background: `${form.headerColor ?? "#bf3330"}`, color: `${isDark(form.headerColor ?? "#bf3330") ? "#FFF" : "#000"}`, fontWeight: 600, textAlign: "center", padding: "0.75rem 1rem", fontSize: "1rem", }}> {form.title} </div>
                             
                             <div style={{ position: "relative", height: "30vh", display: "flex", alignItems: "flex-end", justifyContent: "center", }}>
-                                {/* QR BUTTON (ONLY FOR ADMIN) */}
-                                <button
-                                    onClick={() => setActiveQr(getQrUrl(form.id))}
-                                    style={{
-                                        display:
-                                            admin ? "flex" : "none",
-                                        position: "absolute",
-                                        top: "10px",
-                                        right: "10px",
-                                        width: "36px",
-                                        height: "36px",
-                                        borderRadius: "50%",
-                                        border: "none",
-                                        background: "rgba(0,0,0,0.65)",
-                                        color: "white",
-                                        cursor: "pointer",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        fontSize: "0.85rem",
-                                        zIndex: 2,
-                                    }}> QR
-                                </button>
-
                                 {/* REGISTER BUTTON */}
                                 <button className="font-montserrat"
                                     style={ buttonStyle } 
@@ -310,39 +285,7 @@ export default function loadAllFormsPage(){
                         )}
                     </div>
                 )})}
-
-                {/* FADE ANIMATION FOR OVERLAY */}
-                <div onClick={() => setActiveQr(null)}
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.6)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        opacity: activeQr ? 1 : 0,
-                        pointerEvents: activeQr ? "auto" : "none",
-                        transition: "opacity 0.3s ease",
-                        zIndex: 999,
-                    }}>
-                    <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                            background: "#fff",
-                            padding: "1.2rem",
-                            borderRadius: "14px",
-                            transform: activeQr ? "scale(1)" : "scale(0.95)",
-                            transition: "transform 0.3s ease",
-                            boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
-                        }}>
-                        <img
-                            src={activeQr}
-                            alt="QR Code"
-                            style={{ width: "220px", height: "220px" }}
-                        />
-                    </div>
-                </div>
-            </div> 
+            </div>
 
             {/* Create New Form Button */}
             {admin && (
@@ -386,37 +329,6 @@ export default function loadAllFormsPage(){
                         margin: "2rem"
                     }}>
                     Create New Form
-                    </button>
-                </div>
-            )}
-
-            {/* BARCODE SCANNER BUTTON */}
-            {!admin && forms.length != 0 && (
-                <div style={{ marginTop: "2rem", textAlign: "center" }}>
-                    <button
-                    onClick={() => router.push("scan")}
-                    style={{
-                        alignItems: "center",
-                        gap: "0.6rem",
-                        padding: "0.8rem 1.6rem",
-                        margin: "2rem",
-                        borderRadius: "12px",
-                        border: "none",
-                        fontSize: "1rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        background: "#d43535",
-                        color: "white",
-                        boxShadow: "0 4px 14px rgba(21, 114, 55, 0.3)",
-                        transition: "all 0.2s ease",
-                    }}
-                    onMouseEnter={(e) =>
-                        (e.currentTarget.style.transform = "scale(1.05)")
-                    }
-                    onMouseLeave={(e) =>
-                        (e.currentTarget.style.transform = "scale(1)")
-                    }>
-                    📷 Scan QR code
                     </button>
                 </div>
             )}
