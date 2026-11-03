@@ -4,7 +4,7 @@ import QRCode from 'react-qr-code';
 import { useRef, useState, useEffect } from 'react';
 
 // Helper: truncate text to fit within a max character count
-const truncateTitle = (title, maxLength = 40) => {
+const truncateTitle = (title, maxLength = 80) => {
   if (!title) return '';
   return title.length > maxLength ? title.slice(0, maxLength - 1).trimEnd() + '…' : title;
 };
@@ -41,7 +41,7 @@ export default function Page() {
   const [customTitleInput, setCustomTitleInput] = useState('');
   const [fallbackDomain, setFallbackDomain] = useState('');
 
-  // New state for inline editing
+  // State for inline editing
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
   const editInputRef = useRef(null);
@@ -76,7 +76,7 @@ export default function Page() {
       const data = await res.json();
 
       if (data.title) {
-        setPageTitle(truncateTitle(data.title, 40));
+        setPageTitle(truncateTitle(data.title, 80));
       } else {
         // Title failed to fetch, trigger the modal
         setFallbackDomain(domainName);
@@ -96,7 +96,7 @@ export default function Page() {
 
   const handleModalConfirm = () => {
     const finalTitle = customTitleInput.trim() || fallbackDomain;
-    setPageTitle(truncateTitle(finalTitle, 40));
+    setPageTitle(truncateTitle(finalTitle, 80));
     setShowTitleModal(false);
   };
 
@@ -115,7 +115,7 @@ export default function Page() {
 
   const handleSaveTitle = () => {
     const newTitle = editTitleValue.trim() || fallbackDomain;
-    setPageTitle(truncateTitle(newTitle, 40));
+    setPageTitle(truncateTitle(newTitle, 80));
     setIsEditingTitle(false);
   };
 
@@ -232,9 +232,9 @@ export default function Page() {
               </div>
 
               {/* Page title above QR with inline editing */}
-              <div className="h-10 mb-2 flex items-center justify-center gap-2 px-2">
+              <div className="mb-2 flex items-start justify-center gap-2 px-2 min-h-[2.5rem]">
                 {titleLoading ? (
-                  <span className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                  <span className="animate-spin h-4 w-4 mt-1 border-2 border-blue-600 border-t-transparent rounded-full"></span>
                 ) : isEditingTitle ? (
                   <div className="flex items-center w-full gap-2">
                     <input
@@ -260,12 +260,12 @@ export default function Page() {
                   </div>
                 ) : pageTitle ? (
                   <>
-                    <p className="text-md font-semibold text-gray-800 truncate max-w-[240px]">
+                    <p className="text-md font-semibold text-gray-800 line-clamp-2 max-w-[240px] leading-tight text-center break-words">
                       {pageTitle}
                     </p>
                     <button
                       onClick={handleEditTitleClick}
-                      className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                      className="text-gray-400 hover:text-blue-600 transition-colors p-1 flex-shrink-0 mt-0.5"
                       title="Edit title"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
