@@ -27,6 +27,14 @@ export default function ControlPanelIndex() {
                     </div>
                     </Link>
 
+                    <Link href="/ctrlpanel/tickets">
+                    <div className="bg-[#2a2a2a] rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition">
+                        <div className="text-3xl mb-2">🎟️</div>
+                        <h3 className="text-white font-semibold">Ticket Check-in</h3>
+                        <p className="text-gray-400 text-sm">Scan ticket QR codes and track attendance</p>
+                    </div>
+                    </Link>
+
                     {/* <Link href="/ctrlpanel/oprec-applications">
                     <div className="bg-[#2a2a2a] rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition">
                         <div className="text-3xl mb-2">📁</div>
