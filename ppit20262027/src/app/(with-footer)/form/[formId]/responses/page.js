@@ -5,7 +5,8 @@ import { collection, getDocs, doc, getDoc, query, orderBy } from "firebase/fires
 import { db, auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter, useParams } from "next/navigation"
-import { ChevronLeft, ChevronRight, List, LayoutGrid, Calendar, Clock, Ticket } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, LayoutGrid, ListChecks, Calendar, Clock, Ticket } from "lucide-react";
+import { isAnswerable } from "../../../../../lib/forms/pages";
 
 async function ticketApi(path, { method = "GET", body } = {}) {
     await auth.authStateReady();
@@ -28,6 +29,7 @@ export default function ResponsesPage() {
     const [viewMode, setViewMode] = useState("perSubmission");
     const [currentIndex, setCurrentIndex] = useState(0);
     const [inputValue, setInputValue] = useState("");
+    const [questionIndex, setQuestionIndex] = useState(0);
     const [ticketEnabled, setTicketEnabled] = useState(false);
     const [ticketsByUid, setTicketsByUid] = useState(null);
     const [issuing, setIssuing] = useState(false);
@@ -107,10 +109,12 @@ export default function ResponsesPage() {
                             id: key[1].id || "",
                             label: key[1].label || "",
                             type: key[1].type || "",
+                            required: !!key[1].required,
+                            options: key[1].options || [],
                         };
                     })
-                    // Page breaks aren't questions
-                    .filter(q => q !== null && q.type !== "page");
+                    // Page breaks, info text and images can't be answered, so they're not questions here
+                    .filter(q => q !== null && isAnswerable(q));
 
                 setQuestions(questionList);
                 setTicketEnabled(data.ticket?.enabled === true);
@@ -337,6 +341,13 @@ export default function ResponsesPage() {
         }
     };
 
+    // Jump from the per-question view to one person's full submission
+    const openResponse = (index) => {
+        setCurrentIndex(index);
+        setInputValue(String(index + 1));
+        setViewMode("perSubmission");
+    };
+
     const handleInputChange = (e) => {
         const value = e.target.value;
         setInputValue(value);
@@ -415,6 +426,24 @@ export default function ResponsesPage() {
 
     const currentResponse = responses[currentIndex];
 
+    // Per Question view. Conditional questions are treated like any other: we just list whoever answered.
+    const isAnswered = (value) => value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0);
+    const currentQuestion = questions[Math.min(questionIndex, questions.length - 1)];
+    const questionAnswers = currentQuestion
+        ? responses
+            .map((res, index) => ({ res, index, value: res.answers?.[currentQuestion.id] }))
+            .filter((a) => isAnswered(a.value))
+        : [];
+
+    // Option tally for radio/checkbox; also counts answers whose option was later renamed or removed
+    const optionCounts = {};
+    if (currentQuestion?.type === "radio" || currentQuestion?.type === "checkbox") {
+        currentQuestion.options.forEach((opt) => (optionCounts[opt] = 0));
+        questionAnswers.forEach(({ value }) => {
+            (Array.isArray(value) ? value : [value]).forEach((v) => (optionCounts[v] = (optionCounts[v] || 0) + 1));
+        });
+    }
+
     return (
         <div className="min-h-screen p-6 pt-24 bg-[#7E0C0E]">
             <div className="max-w-4xl mx-auto">
@@ -442,6 +471,16 @@ export default function ResponsesPage() {
                             >
                                 <List size={18} />
                                 All Responses
+                            </button>
+                            <button
+                                onClick={() => setViewMode("perQuestion")}
+                                className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 ${viewMode === "perQuestion"
+                                    ? "bg-[#7E0C0E] text-white shadow-md"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                    }`}
+                            >
+                                <ListChecks size={18} />
+                                Per Question
                             </button>
                         </div>
                     </div>
@@ -584,6 +623,93 @@ export default function ResponsesPage() {
                                         })}
                                     </div>
                                 </div>
+                            </div>
+                        ) : viewMode === "perQuestion" ? (
+                            // Per Question View
+                            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                {/* Question picker */}
+                                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => setQuestionIndex((i) => Math.max(i - 1, 0))}
+                                            disabled={questionIndex === 0}
+                                            className="p-2 rounded-lg bg-white shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-sm"
+                                        >
+                                            <ChevronLeft size={20} className="text-gray-700" />
+                                        </button>
+                                        <select
+                                            value={questionIndex}
+                                            onChange={(e) => setQuestionIndex(Number(e.target.value))}
+                                            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                                        >
+                                            {questions.map((q, i) => (
+                                                <option key={q.id} value={i}>
+                                                    {i + 1}. {q.label || q.id}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={() => setQuestionIndex((i) => Math.min(i + 1, questions.length - 1))}
+                                            disabled={questionIndex >= questions.length - 1}
+                                            className="p-2 rounded-lg bg-white shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-sm"
+                                        >
+                                            <ChevronRight size={20} className="text-gray-700" />
+                                        </button>
+                                    </div>
+                                    {currentQuestion && (
+                                        <p className="text-sm text-gray-500 mt-3">
+                                            {questionAnswers.length} of {responses.length} {responses.length === 1 ? "response" : "responses"} answered this question
+                                        </p>
+                                    )}
+                                </div>
+
+                                {!currentQuestion ? (
+                                    <p className="p-12 text-center text-gray-500">This form has no questions to show.</p>
+                                ) : (
+                                    <div className="p-6 space-y-6">
+                                        {Object.keys(optionCounts).length > 0 && (
+                                            <div className="space-y-3">
+                                                {Object.entries(optionCounts).map(([opt, count]) => {
+                                                    const percent = questionAnswers.length ? Math.round((count / questionAnswers.length) * 100) : 0;
+                                                    return (
+                                                        <div key={opt}>
+                                                            <div className="flex justify-between gap-4 text-sm text-gray-700 mb-1">
+                                                                <span className="break-words">{opt}</span>
+                                                                <span className="text-gray-500 whitespace-nowrap">{count} ({percent}%)</span>
+                                                            </div>
+                                                            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                                                <div className="h-full bg-[#7E0C0E]" style={{ width: `${percent}%` }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {questionAnswers.length === 0 ? (
+                                            <p className="text-center text-gray-500">No one has answered this question yet.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {questionAnswers.map(({ res, index, value }) => (
+                                                    <div key={res.id} className="bg-gray-50 rounded-lg p-3">
+                                                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 mb-1">
+                                                            <button
+                                                                onClick={() => openResponse(index)}
+                                                                className="font-medium hover:text-[#7E0C0E] hover:underline"
+                                                            >
+                                                                Response #{index + 1}
+                                                            </button>
+                                                            <span>{formatDate(res.submittedAt)}</span>
+                                                        </div>
+                                                        <div className="text-sm text-gray-700 break-words">
+                                                            {renderAnswer(value, currentQuestion.type)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             // All Responses View
