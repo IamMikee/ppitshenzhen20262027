@@ -38,7 +38,7 @@ function Field({ label, value }) {
 }
 
 /* Shows the logged-in user's ticket for a ticketed form, or that it hasn't been issued yet. */
-export default function TicketCard({ formId, heading, onBack }) {
+export default function TicketCard({ formId, heading, onBack, onSubmitAnother }) {
   const [ticket, setTicket] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
@@ -74,6 +74,15 @@ export default function TicketCard({ formId, heading, onBack }) {
     }
   };
 
+  const submitAnotherButton = onSubmitAnother && (
+    <button
+      onClick={onSubmitAnother}
+      className="mt-6 block mx-auto px-6 py-2.5 bg-white text-[#7E0C0E] rounded-lg font-semibold text-sm shadow-md hover:bg-gray-100 transition-all duration-200"
+    >
+      Submit another response
+    </button>
+  );
+
   useEffect(() => {
     load();
   }, [formId]);
@@ -90,27 +99,30 @@ export default function TicketCard({ formId, heading, onBack }) {
         </button>
 
         {ticket && ticket.status !== "issued" && (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
-            {ticket.status === "pending" ? (
-              <>
-                <Clock size={40} className="text-[#7E0C0E] mx-auto mb-3" />
-                <h2 className="text-xl font-bold text-gray-900 mb-2">Registration received</h2>
-                <p className="text-gray-600 text-sm mb-1">
-                  The committee is reviewing registrations for {ticket.event?.eventName || heading}.
-                </p>
-                <p className="text-gray-400 text-sm">Once approved, your ticket will be emailed to you and shown on this page.</p>
-              </>
-            ) : (
-              <>
-                <AlertCircle size={40} className="text-gray-400 mx-auto mb-3" />
-                <h2 className="text-xl font-bold text-gray-900 mb-2">No ticket for this event</h2>
-                <p className="text-gray-600 text-sm">
-                  Unfortunately we couldn&apos;t offer you a ticket for {ticket.event?.eventName || heading}. If you think
-                  this is a mistake, please contact PPIT Shenzhen.
-                </p>
-              </>
-            )}
-          </div>
+          <>
+            <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+              {ticket.status === "pending" ? (
+                <>
+                  <Clock size={40} className="text-[#7E0C0E] mx-auto mb-3" />
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">Registration received</h2>
+                  <p className="text-gray-600 text-sm mb-1">
+                    The committee is reviewing registrations for {ticket.event?.eventName || heading}.
+                  </p>
+                  <p className="text-gray-400 text-sm">Once approved, your ticket will be emailed to you and shown on this page.</p>
+                </>
+              ) : (
+                <>
+                  <AlertCircle size={40} className="text-gray-400 mx-auto mb-3" />
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">No ticket for this event</h2>
+                  <p className="text-gray-600 text-sm">
+                    Unfortunately we couldn&apos;t offer you a ticket for {ticket.event?.eventName || heading}. If you think
+                    this is a mistake, please contact PPIT Shenzhen.
+                  </p>
+                </>
+              )}
+            </div>
+            {submitAnotherButton}
+          </>
         )}
 
         {!ticket && (
@@ -192,6 +204,8 @@ export default function TicketCard({ formId, heading, onBack }) {
             >
               {downloading ? "Preparing PDF..." : "Download my ticket"}
             </button>
+
+            {submitAnotherButton}
 
             <div className="mt-5 text-center text-xs text-white/70 leading-relaxed">
               {ticket.emailStatus === "sent" ? (

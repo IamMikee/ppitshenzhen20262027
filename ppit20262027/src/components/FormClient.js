@@ -129,7 +129,12 @@ export default function FormClient({ form }) {
 
   // Ticketed forms: after submitting (now or earlier) the user sees their ticket
   if (form.ticket?.enabled && (success || formSubmitted)) {
-    return <TicketCard formId={form.id} heading={form.title} onBack={() => router.push('/form')} />;
+    return <TicketCard
+      formId={form.id}
+      heading={form.title}
+      onBack={() => router.push('/form')}
+      onSubmitAnother={allowMultiSub ? startNewResponse : undefined}
+    />;
   }
 
   if (formSubmitted) {
