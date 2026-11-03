@@ -32,6 +32,7 @@ export async function createForm(formData) {
     coverImage: formData.coverImage || "",
     isActive: formData.isActive !== undefined ? formData.isActive : false,   // ✅ Use passed value
     isClosed: formData.isClosed !== undefined ? formData.isClosed : true,    // ✅ Use passed value
+    allowMultiSub: formData.allowMultiSub === true,
     ticket: formData.ticket || null,
     createdBy: formData.createdBy,
     createdAt: serverTimestamp(),
@@ -102,6 +103,15 @@ export async function submitResponse(formId, questions, answers) {
 
   const formData = formSnap.data();
   const formTitle = formData.title || "";
+  const allowMultiSub = formData.allowMultiSub === true;
+
+  // 🔹 BLOCK REPEAT SUBMISSIONS unless the form allows them
+  if (!allowMultiSub) {
+    const submittedForms = userData.submittedForms || [];
+    if (submittedForms.includes(formId)) {
+      throw new Error("You have already submitted this form");
+    }
+  }
 
   // 🔹 SAVE RESPONSE - MODIFIED: Now saving to subcollection
   const docRef = await addDoc(collection(db, "forms", formId, "responses"), {
