@@ -20,6 +20,7 @@ export default function FormClient({ form }) {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [formClosed, setFormClosed] = useState(false);
   const [fileName, setFileName] = useState({});
+  const [allowMultiSub, setAllowMultiSub] = useState(false);
   // Stack of visited page indices; the last one is the page on screen
   const [history, setHistory] = useState([0]);
   const router = useRouter();
@@ -36,8 +37,11 @@ export default function FormClient({ form }) {
             getDoc(doc(db, "forms", form.id))
           ]);
 
+          const multi = formSnap.exists() && formSnap.data().allowMultiSub === true;
+          setAllowMultiSub(multi);
+
           const submittedForms = userSnap.data()?.submittedForms || [];
-          if (submittedForms.includes(form.id)) {
+          if (!multi && submittedForms.includes(form.id)) {
             setFormSubmitted(true);
           }
 
@@ -62,6 +66,15 @@ export default function FormClient({ form }) {
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/__(.*?)__/g, '<u>$1</u>')
       .replace(/\n/g, '<br>');
+  };
+
+  const startNewResponse = () => {
+    setAnswers({});
+    setFileName({});
+    setHistory([0]);
+    setError("");
+    setSuccess(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading) {
@@ -168,13 +181,23 @@ export default function FormClient({ form }) {
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">Thank You!</h2>
           <p className="text-gray-500 mb-1">Your response has been submitted successfully.</p>
           <p className="text-gray-400 text-sm mb-6">We appreciate your time and input.</p>
-          <button
-            onClick={() => router.push('/form')}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
-          >
-            <ArrowLeft size={18} />
-            Back to Forms
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {allowMultiSub && (
+              <button
+                onClick={startNewResponse}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-white text-[#7E0C0E] border-2 border-[#7E0C0E] rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                Submit another response
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/form')}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+            >
+              <ArrowLeft size={18} />
+              Back to Forms
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -505,41 +528,41 @@ export default function FormClient({ form }) {
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
             </button>
           ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || success}
-            className="relative bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || success}
+              className="relative bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm
               hover:bg-gray-100 hover:shadow-lg transition-all duration-200 
               active:scale-95 active:shadow-sm
               disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
               shadow-md border-2 border-white hover:border-[#7E0C0E]/20
               overflow-hidden group"
-          >
-            {/* Ripple effect background */}
-            <span className="absolute inset-0 bg-gradient-to-r from-[#7E0C0E]/0 via-[#7E0C0E]/5 to-[#7E0C0E]/0 
+            >
+              {/* Ripple effect background */}
+              <span className="absolute inset-0 bg-gradient-to-r from-[#7E0C0E]/0 via-[#7E0C0E]/5 to-[#7E0C0E]/0 
                      translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out">
-            </span>
+              </span>
 
-            <span className="relative flex items-center justify-center gap-2">
-              {submitting ? (
-                <>
-                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-[#7E0C0E] border-t-transparent"></span>
-                  <span>Submitting...</span>
-                </>
-              ) : success ? (
-                <>
-                  <CheckCircle size={16} className="text-green-500" />
-                  <span>Submitted ✓</span>
-                </>
-              ) : (
-                <>
-                  <span>Submit</span>
-                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
-                </>
-              )}
-            </span>
-          </button>
+              <span className="relative flex items-center justify-center gap-2">
+                {submitting ? (
+                  <>
+                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-[#7E0C0E] border-t-transparent"></span>
+                    <span>Submitting...</span>
+                  </>
+                ) : success ? (
+                  <>
+                    <CheckCircle size={16} className="text-green-500" />
+                    <span>Submitted ✓</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Submit</span>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
+                  </>
+                )}
+              </span>
+            </button>
           )}
           <span className="text-xs text-white/70 font-medium">
             * Required fields
