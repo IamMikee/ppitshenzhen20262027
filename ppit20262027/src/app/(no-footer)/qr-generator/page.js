@@ -1,7 +1,7 @@
 "use client";
 
 import QRCode from 'react-qr-code';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 // Helper: truncate text to fit within a max character count
 const truncateTitle = (title, maxLength = 40) => {
@@ -41,7 +41,19 @@ export default function Page() {
   const [customTitleInput, setCustomTitleInput] = useState('');
   const [fallbackDomain, setFallbackDomain] = useState('');
 
+  // New state for inline editing
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
+  const editInputRef = useRef(null);
+
   const qrRef = useRef(null);
+
+  // Focus the input when edit mode is activated
+  useEffect(() => {
+    if (isEditingTitle && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [isEditingTitle]);
 
   const handleGenerateQR = async () => {
     if (!inputUrl.trim()) return;
@@ -56,7 +68,6 @@ export default function Page() {
     try {
       domainName = new URL(inputUrl).hostname.replace(/^www\./, '');
     } catch (e) {
-      // If it's not a valid URL (e.g., they typed "google" instead of "google.com")
       domainName = inputUrl;
     }
 
@@ -94,6 +105,18 @@ export default function Page() {
     setInputUrl('');
     setQrUrl('');
     setPageTitle('');
+    setIsEditingTitle(false);
+  };
+
+  const handleEditTitleClick = () => {
+    setEditTitleValue(pageTitle);
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveTitle = () => {
+    const newTitle = editTitleValue.trim() || fallbackDomain;
+    setPageTitle(truncateTitle(newTitle, 40));
+    setIsEditingTitle(false);
   };
 
   const downloadQR = () => {
@@ -208,16 +231,50 @@ export default function Page() {
                 </button>
               </div>
 
-              {/* Page title above QR */}
-              {titleLoading ? (
-                <div className="h-6 mb-2 flex items-center justify-center">
+              {/* Page title above QR with inline editing */}
+              <div className="h-10 mb-2 flex items-center justify-center gap-2 px-2">
+                {titleLoading ? (
                   <span className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                </div>
-              ) : pageTitle ? (
-                <p className="text-sm font-semibold text-gray-800 mb-2 truncate px-2">
-                  {pageTitle}
-                </p>
-              ) : null}
+                ) : isEditingTitle ? (
+                  <div className="flex items-center w-full gap-2">
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editTitleValue}
+                      onChange={(e) => setEditTitleValue(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-800 text-center"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveTitle();
+                        if (e.key === 'Escape') setIsEditingTitle(false);
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveTitle}
+                      className="text-green-600 hover:text-green-700 p-1"
+                      title="Save"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : pageTitle ? (
+                  <>
+                    <p className="text-md font-semibold text-gray-800 truncate max-w-[240px]">
+                      {pageTitle}
+                    </p>
+                    <button
+                      onClick={handleEditTitleClick}
+                      className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                      title="Edit title"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </>
+                ) : null}
+              </div>
 
               <div ref={qrRef} className="bg-white p-4 rounded-xl inline-block">
                 <QRCode
