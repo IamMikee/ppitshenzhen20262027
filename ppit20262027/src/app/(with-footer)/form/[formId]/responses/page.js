@@ -21,6 +21,27 @@ async function ticketApi(path, { method = "GET", body } = {}) {
     return data;
 }
 
+function FileAnswer({ url }) {
+    const [failed, setFailed] = useState(false);
+    if (failed) {
+        return (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                View uploaded file
+            </a>
+        );
+    }
+    return (
+        <div className="mt-2">
+            <img
+                src={url}
+                alt="Uploaded file"
+                className="rounded-lg max-w-full max-h-96 object-contain border border-gray-200"
+                onError={() => setFailed(true)}
+            />
+        </div>
+    );
+}
+
 export default function ResponsesPage() {
     const [responses, setResponses] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -41,7 +62,8 @@ export default function ResponsesPage() {
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (!u) {
-                router.push("/login")
+                router.push("/login");
+                return;
             }
 
             try {
@@ -51,11 +73,12 @@ export default function ResponsesPage() {
                 if (userSnap.exists()) {
                     const userData = userSnap.data();
                     if (!userData.admin) {
-                        router.push("/")
+                        router.push("/");
                     }
-                }
+                } else router.push("/");
             } catch (error) {
                 console.error("failed to verify admin status: " + error);
+                router.push("/");
             }
         });
         return () => unsub();
@@ -385,19 +408,7 @@ export default function ResponsesPage() {
         if (value === undefined || value === null) return "—";
         if (Array.isArray(value)) return value.join(", ");
         if (questionType === "file" && typeof value === "string" && value.startsWith("http")) {
-            return (
-                <div className="mt-2">
-                    <img
-                        src={value}
-                        alt="Uploaded file"
-                        className="rounded-lg max-w-full max-h-96 object-contain border border-gray-200"
-                        onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.parentElement.innerHTML = `<a href="${value}" target="_blank" class="text-blue-600 hover:underline">View uploaded file</a>`;
-                        }}
-                    />
-                </div>
-            );
+            return <FileAnswer key={value} url={value} />;
         }
         return value;
     };
@@ -714,7 +725,7 @@ export default function ResponsesPage() {
                         ) : (
                             // All Responses View
                             <div className="space-y-4">
-                                {responses.map((res, index) => {
+                                {[...responses].reverse().map((res, index) => {
                                     const responseNumber = responses.length - index;
                                     return (
                                         <div key={res.id} className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
