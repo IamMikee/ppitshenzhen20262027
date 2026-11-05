@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminDb, requireAdmin, HttpError, generateTicketCode } from "@/lib/tickets/server";
+import {
+  adminDb,
+  requireAdmin,
+  HttpError,
+  generateTicketCode,
+  holderRef,
+  holderCodes,
+  responseHasTicket,
+} from "@/lib/tickets/server";
 import { eventFromForm, buildTicketFiles, fetchCover } from "@/lib/tickets/assets";
 import { sendTicketEmail, createBulkTransport } from "@/lib/tickets/email";
 
@@ -14,7 +22,7 @@ const DELAY_BETWEEN_INDIVIDUAL = 3000;
 const DELAY_BETWEEN_BATCHES = 10000;
 // Stop starting new emails after this so the request finishes well inside maxDuration.
 const EMAIL_BUDGET_MS = 180 * 1000;
-// Two writes per ticket (ticket + holder); Firestore batches cap at 500 writes.
+// One write per ticket plus one per holder; Firestore batches cap at 500 writes.
 const WRITES_PER_COMMIT = 200;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,52 +38,88 @@ function pickName(questions, answers, userDoc, email) {
   return (fromForm || userDoc?.name || email || "Guest").slice(0, 80);
 }
 
-/* Creates a ticket for every response that isn't declined and doesn't have one yet. */
+const submittedMillis = (r) => r.data().submittedAt?.toMillis?.() || 0;
+
+/* Creates a ticket for every response that isn't declined and isn't covered by a ticket yet. */
 async function issueMissingTickets(db, formId, form) {
-  const [responses, holders] = await Promise.all([
+  const [responses, holders, tickets] = await Promise.all([
     db.collection("forms").doc(formId).collection("responses").get(),
     db.collection("ticketHolders").where("formId", "==", formId).get(),
+    db.collection("tickets").where("formId", "==", formId).select("responseId").get(),
   ]);
 
-  const hasTicket = new Set(holders.docs.map((d) => d.data().uid));
-  const todo = [];
-  for (const r of responses.docs) {
-    const { submittedBy, ticketDeclined } = r.data();
-    if (!submittedBy || ticketDeclined || hasTicket.has(submittedBy)) continue;
-    hasTicket.add(submittedBy); // one ticket per user, even with duplicate responses
-    todo.push(r);
+  const ticketedResponses = new Set(tickets.docs.map((d) => d.get("responseId")));
+  const holderByUid = new Map(holders.docs.map((d) => [d.data().uid, d]));
+  // uid -> that user's responses getting a ticket this run, oldest first so codes stay in submission order
+  const todo = new Map();
+  for (const r of [...responses.docs].sort((a, b) => submittedMillis(a) - submittedMillis(b))) {
+    const { submittedBy: uid, ticketDeclined } = r.data();
+    if (!uid || ticketDeclined) continue;
+    const userHasTicket = holderCodes(holderByUid.get(uid)?.data()).length > 0 || todo.has(uid);
+    if (responseHasTicket(form, r.id, ticketedResponses, userHasTicket)) continue;
+    todo.set(uid, [...(todo.get(uid) || []), r]);
   }
-  if (!todo.length) return 0;
+  if (!todo.size) return 0;
 
-  const users = await db.getAll(...todo.map((r) => db.collection("users").doc(r.data().submittedBy)));
+  const uids = [...todo.keys()];
+  const users = await db.getAll(...uids.map((uid) => db.collection("users").doc(uid)));
+  const userByUid = new Map(uids.map((uid, i) => [uid, users[i].data()]));
 
-  for (let i = 0; i < todo.length; i += WRITES_PER_COMMIT) {
+  // A user's tickets and holder update go in the same commit, one write per ticket plus one for the holder.
+  const commits = [[]];
+  let writes = 0;
+  for (const uid of uids) {
+    const size = todo.get(uid).length + 1;
+    if (writes + size > WRITES_PER_COMMIT && commits.at(-1).length) {
+      commits.push([]);
+      writes = 0;
+    }
+    commits.at(-1).push(uid);
+    writes += size;
+  }
+
+  let issued = 0;
+  for (const group of commits) {
     const batch = db.batch();
-    todo.slice(i, i + WRITES_PER_COMMIT).forEach((r, j) => {
-      const { submittedBy: uid, answers, userEmail } = r.data();
-      const userDoc = users[i + j].data();
-      const email = userEmail || userDoc?.email || "";
-      const code = generateTicketCode();
-      // create() fails the whole batch if the holder already exists, so a double click can't double-issue.
-      batch.create(db.collection("tickets").doc(code), {
-        code,
-        formId,
-        responseId: r.id,
-        uid,
-        email,
-        name: pickName(form.questions, answers, userDoc, email),
-        createdAt: FieldValue.serverTimestamp(),
-        checkedIn: false,
-        checkedInAt: null,
-        checkedInBy: null,
-        emailStatus: "pending",
-        emailSentAt: null,
+    for (const uid of group) {
+      const userDoc = userByUid.get(uid);
+      const codes = todo.get(uid).map((r) => {
+        const { answers, userEmail } = r.data();
+        const email = userEmail || userDoc?.email || "";
+        const code = generateTicketCode();
+        batch.create(db.collection("tickets").doc(code), {
+          code,
+          formId,
+          responseId: r.id,
+          uid,
+          email,
+          name: pickName(form.questions, answers, userDoc, email),
+          createdAt: FieldValue.serverTimestamp(),
+          checkedIn: false,
+          checkedInAt: null,
+          checkedInBy: null,
+          emailStatus: "pending",
+          emailSentAt: null,
+        });
+        return code;
       });
-      batch.create(db.collection("ticketHolders").doc(`${formId}_${uid}`), { code, formId, uid });
-    });
+
+      // Both writes fail the whole batch if another run touched this holder first, so a double click can't double-issue.
+      const holder = holderByUid.get(uid);
+      if (holder) {
+        batch.update(
+          holder.ref,
+          { codes: [...holderCodes(holder.data()), ...codes], code: FieldValue.delete() },
+          { lastUpdateTime: holder.updateTime }
+        );
+      } else {
+        batch.create(holderRef(db, formId, uid), { codes, formId, uid });
+      }
+      issued += codes.length;
+    }
     await batch.commit();
   }
-  return todo.length;
+  return issued;
 }
 
 /*

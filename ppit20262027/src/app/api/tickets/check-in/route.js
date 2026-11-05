@@ -28,6 +28,7 @@ export async function GET(req) {
           return {
             code: t.code,
             uid: t.uid,
+            responseId: t.responseId || "",
             name: t.name,
             email: t.email,
             registeredAt: millis(t.createdAt),
@@ -97,8 +98,14 @@ export async function POST(req) {
       const userRef = db.collection("users").doc(t.uid);
 
       if (undo) {
+        // Someone with several tickets still attended if another of them is checked in.
+        const othersIn = await tx.get(
+          db.collection("tickets").where("formId", "==", formId).where("uid", "==", t.uid).where("checkedIn", "==", true)
+        );
         tx.update(ref, { checkedIn: false, checkedInAt: null, checkedInBy: null });
-        tx.set(userRef, { attendedForms: FieldValue.arrayRemove(formId) }, { merge: true });
+        if (othersIn.docs.every((d) => d.id === code)) {
+          tx.set(userRef, { attendedForms: FieldValue.arrayRemove(formId) }, { merge: true });
+        }
         return { status: "undone", ticket: { ...ticket, checkedInAt: null, checkedInBy: null } };
       }
       if (t.checkedIn) return { status: "already", ticket };

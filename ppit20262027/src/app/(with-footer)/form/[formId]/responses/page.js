@@ -52,7 +52,8 @@ export default function ResponsesPage() {
     const [inputValue, setInputValue] = useState("");
     const [questionIndex, setQuestionIndex] = useState(0);
     const [ticketEnabled, setTicketEnabled] = useState(false);
-    const [ticketsByUid, setTicketsByUid] = useState(null);
+    const [allowMultiSub, setAllowMultiSub] = useState(false);
+    const [ticketList, setTicketList] = useState(null);
     const [issuing, setIssuing] = useState(false);
     const [ticketMsg, setTicketMsg] = useState("");
     const [reviewingId, setReviewingId] = useState(null);
@@ -141,6 +142,7 @@ export default function ResponsesPage() {
 
                 setQuestions(questionList);
                 setTicketEnabled(data.ticket?.enabled === true);
+                setAllowMultiSub(data.allowMultiSub === true);
             } catch (err) {
                 console.error(err);
             }
@@ -157,7 +159,7 @@ export default function ResponsesPage() {
     const loadTickets = async () => {
         try {
             const { attendees } = await ticketApi(`/api/tickets/check-in?formId=${encodeURIComponent(formId)}`);
-            setTicketsByUid(Object.fromEntries(attendees.map((a) => [a.uid, a])));
+            setTicketList(attendees);
         } catch (err) {
             setTicketMsg(err.message);
         }
@@ -179,10 +181,14 @@ export default function ResponsesPage() {
         }
     };
 
-    const tickets = Object.values(ticketsByUid || {});
-    const hasTicket = (res) => !!ticketsByUid?.[res.submittedBy];
-    const toIssue = new Set(responses.filter((r) => !r.ticketDeclined && !hasTicket(r)).map((r) => r.submittedBy)).size;
-    const declinedCount = responses.filter((r) => r.ticketDeclined && !hasTicket(r)).length;
+    const tickets = ticketList || [];
+    const ticketByResponse = new Map(tickets.map((t) => [t.responseId, t]));
+    const ticketByUid = new Map(tickets.map((t) => [t.uid, t]));
+    // Same rule as the server: one-response forms stop at one ticket per person, even with duplicate responses
+    const ticketFor = (res) => ticketByResponse.get(res.id) || (allowMultiSub ? undefined : ticketByUid.get(res.submittedBy));
+    const awaitingResponses = responses.filter((r) => !r.ticketDeclined && !ticketFor(r));
+    const toIssue = allowMultiSub ? awaitingResponses.length : new Set(awaitingResponses.map((r) => r.submittedBy)).size;
+    const declinedCount = responses.filter((r) => r.ticketDeclined && !ticketFor(r)).length;
     const unsentCount = tickets.filter((t) => t.emailStatus === "pending").length;
     const failedCount = tickets.filter((t) => t.emailStatus === "failed").length;
 
@@ -191,7 +197,7 @@ export default function ResponsesPage() {
         if (
             !retryFailed &&
             toIssue > 0 &&
-            !confirm(`Issue tickets to ${toIssue} ${toIssue === 1 ? "person" : "people"} and email them now?\n\n${declinedCount} declined ${declinedCount === 1 ? "response" : "responses"} won't get one. People who register later can be issued in another run.`)
+            !confirm(`Issue ${toIssue} ${toIssue === 1 ? "ticket" : "tickets"} and email them now?\n\n${declinedCount} declined ${declinedCount === 1 ? "response" : "responses"} won't get one. People who register later can be issued in another run.`)
         ) return;
 
         setIssuing(true);
@@ -220,8 +226,8 @@ export default function ResponsesPage() {
     };
 
     const renderTicketStatus = (res) => {
-        if (!ticketEnabled || !ticketsByUid) return null;
-        const t = ticketsByUid[res.submittedBy];
+        if (!ticketEnabled || !ticketList) return null;
+        const t = ticketFor(res);
         if (t) {
             return (
                 <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
@@ -534,14 +540,14 @@ export default function ResponsesPage() {
                                     <Ticket size={18} /> E-Tickets
                                 </h2>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    {ticketsByUid
+                                    {ticketList
                                         ? `${tickets.length} issued · ${toIssue} awaiting · ${declinedCount} declined${unsentCount ? ` · ${unsentCount} not emailed yet` : ""}`
                                         : "Loading tickets..."}
                                 </p>
                             </div>
                             <button
                                 onClick={() => issueTickets()}
-                                disabled={!ticketsByUid || issuing || (toIssue === 0 && unsentCount === 0)}
+                                disabled={!ticketList || issuing || (toIssue === 0 && unsentCount === 0)}
                                 className="bg-[#7E0C0E] text-white px-4 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {issuing

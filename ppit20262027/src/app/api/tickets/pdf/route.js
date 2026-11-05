@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
-import { adminDb, requireUser, HttpError } from "@/lib/tickets/server";
+import { adminDb, requireUser, HttpError, normalizeTicketCode } from "@/lib/tickets/server";
 import { eventFromForm, buildTicketFiles } from "@/lib/tickets/assets";
 
 export const maxDuration = 30;
 
-/* GET ?formId=... -> the logged-in user's ticket PDF for that form. */
+/* GET ?formId=...&code=... -> the PDF of one of the logged-in user's tickets for that form. */
 export async function GET(req) {
   try {
     const authUser = await requireUser(req);
-    const formId = new URL(req.url).searchParams.get("formId");
-    if (!formId) throw new HttpError(400, "Missing formId");
+    const params = new URL(req.url).searchParams;
+    const formId = params.get("formId");
+    const code = normalizeTicketCode(params.get("code"));
+    if (!formId || !code) throw new HttpError(400, "Missing formId or code");
 
     const db = adminDb();
-    const holder = await db.collection("ticketHolders").doc(`${formId}_${authUser.uid}`).get();
-    if (!holder.exists) throw new HttpError(404, "No ticket found.");
-
     const [ticketSnap, formSnap] = await Promise.all([
-      db.collection("tickets").doc(holder.data().code).get(),
+      db.collection("tickets").doc(code).get(),
       db.collection("forms").doc(formId).get(),
     ]);
     const ticket = ticketSnap.data();
+    if (ticket?.uid !== authUser.uid || ticket.formId !== formId) throw new HttpError(404, "No ticket found.");
     const { pdf } = await buildTicketFiles(ticket, eventFromForm(formSnap.data() || {}));
 
     return new Response(pdf, {
