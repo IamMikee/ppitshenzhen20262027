@@ -8,7 +8,7 @@ import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { getDoc, doc } from "firebase/firestore";
-import { CheckCircle, ArrowLeft, Upload, FileText, AlertCircle, ArrowRight } from "lucide-react";
+import { CheckCircle, ArrowLeft, Upload, FileText, AlertCircle, ArrowRight, Ticket } from "lucide-react";
 
 export default function FormClient({ form }) {
   const [user, setUser] = useState(null);
@@ -20,6 +20,9 @@ export default function FormClient({ form }) {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [formClosed, setFormClosed] = useState(false);
   const [fileName, setFileName] = useState({});
+  const [allowMultiSub, setAllowMultiSub] = useState(false);
+  const [showTickets, setShowTickets] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   // Stack of visited page indices; the last one is the page on screen
   const [history, setHistory] = useState([0]);
   const router = useRouter();
@@ -36,8 +39,14 @@ export default function FormClient({ form }) {
             getDoc(doc(db, "forms", form.id))
           ]);
 
+          const multi = formSnap.exists() && formSnap.data().allowMultiSub === true;
+          setAllowMultiSub(multi);
+
           const submittedForms = userSnap.data()?.submittedForms || [];
-          if (submittedForms.includes(form.id)) {
+          const already = submittedForms.includes(form.id);
+          setHasSubmitted(already);
+
+          if (!multi && already) {
             setFormSubmitted(true);
           }
 
@@ -64,6 +73,16 @@ export default function FormClient({ form }) {
       .replace(/\n/g, '<br>');
   };
 
+  const startNewResponse = () => {
+    setAnswers({});
+    setFileName({});
+    setHistory([0]);
+    setError("");
+    setSuccess(false);
+    setShowTickets(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center">
@@ -87,6 +106,16 @@ export default function FormClient({ form }) {
     );
   }
 
+  // Ticketed forms: after submitting (now or earlier) the user sees their ticket
+  if (form.ticket?.enabled && (success || formSubmitted || showTickets)) {
+    return <TicketCard
+      formId={form.id}
+      heading={form.title}
+      onBack={() => (showTickets && !success ? setShowTickets(false) : router.push('/form'))}
+      onSubmitAnother={allowMultiSub && !formClosed ? startNewResponse : undefined}
+    />;
+  }
+
   if (formClosed) {
     return (
       <div className="min-h-screen bg-[#7E0C0E] flex items-center justify-center p-6 font-montserrat">
@@ -101,6 +130,15 @@ export default function FormClient({ form }) {
             <div className="h-1 w-16 bg-[#7E0C0E] mx-auto rounded-full mb-4"></div>
             <p className="text-gray-600 mb-4">This form is currently closed and not accepting new submissions.</p>
             <p className="text-gray-400 text-sm mb-6">Please contact the administrator if you have questions.</p>
+            {form.ticket?.enabled && hasSubmitted && (
+              <button
+                onClick={() => setShowTickets(true)}
+                className="inline-flex items-center gap-2 px-6 py-2.5 mr-3 bg-white text-[#7E0C0E] border-2 border-[#7E0C0E] rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                <Ticket size={18} />
+                View my tickets
+              </button>
+            )}
             <button
               onClick={() => router.push('/form')}
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
@@ -112,11 +150,6 @@ export default function FormClient({ form }) {
         </div>
       </div>
     );
-  }
-
-  // Ticketed forms: after submitting (now or earlier) the user sees their ticket
-  if (form.ticket?.enabled && (success || formSubmitted)) {
-    return <TicketCard formId={form.id} heading={form.title} onBack={() => router.push('/form')} />;
   }
 
   if (formSubmitted) {
@@ -168,13 +201,23 @@ export default function FormClient({ form }) {
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">Thank You!</h2>
           <p className="text-gray-500 mb-1">Your response has been submitted successfully.</p>
           <p className="text-gray-400 text-sm mb-6">We appreciate your time and input.</p>
-          <button
-            onClick={() => router.push('/form')}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
-          >
-            <ArrowLeft size={18} />
-            Back to Forms
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {allowMultiSub && (
+              <button
+                onClick={startNewResponse}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-white text-[#7E0C0E] border-2 border-[#7E0C0E] rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                Submit another response
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/form')}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#7E0C0E] text-white rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+            >
+              <ArrowLeft size={18} />
+              Back to Forms
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -277,6 +320,7 @@ export default function FormClient({ form }) {
       await submitResponse(form.id, questions, processedAnswers);
 
       setSuccess(true);
+      setHasSubmitted(true);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed");
@@ -288,6 +332,20 @@ export default function FormClient({ form }) {
   return (
     <div className="min-h-screen bg-[#7E0C0E] py-12 px-4 pt-24 font-montserrat">
       <div className="max-w-4xl mx-auto">
+        {/* View Existing Tickets (visible for those who have submitted & multiple submissions is TRUE) */}
+        {form.ticket?.enabled && allowMultiSub && hasSubmitted && (
+          <div className="flex justify-end mb-4">
+            <button
+              type="button"
+              onClick={() => setShowTickets(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white border-2 border-white/60 hover:bg-white/10 transition-all duration-200"
+            >
+              <Ticket size={16} />
+              View my tickets
+            </button>
+          </div>
+        )}
+
         {/* Form Header Card - Single box with outline and white background */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-2 border-[#7E0C0E] mb-6">
           {/* Header with white background and black text */}
@@ -505,41 +563,41 @@ export default function FormClient({ form }) {
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
             </button>
           ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || success}
-            className="relative bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || success}
+              className="relative bg-white text-[#7E0C0E] px-8 py-3 rounded-lg font-semibold text-sm
               hover:bg-gray-100 hover:shadow-lg transition-all duration-200 
               active:scale-95 active:shadow-sm
               disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
               shadow-md border-2 border-white hover:border-[#7E0C0E]/20
               overflow-hidden group"
-          >
-            {/* Ripple effect background */}
-            <span className="absolute inset-0 bg-gradient-to-r from-[#7E0C0E]/0 via-[#7E0C0E]/5 to-[#7E0C0E]/0 
+            >
+              {/* Ripple effect background */}
+              <span className="absolute inset-0 bg-gradient-to-r from-[#7E0C0E]/0 via-[#7E0C0E]/5 to-[#7E0C0E]/0 
                      translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out">
-            </span>
+              </span>
 
-            <span className="relative flex items-center justify-center gap-2">
-              {submitting ? (
-                <>
-                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-[#7E0C0E] border-t-transparent"></span>
-                  <span>Submitting...</span>
-                </>
-              ) : success ? (
-                <>
-                  <CheckCircle size={16} className="text-green-500" />
-                  <span>Submitted ✓</span>
-                </>
-              ) : (
-                <>
-                  <span>Submit</span>
-                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
-                </>
-              )}
-            </span>
-          </button>
+              <span className="relative flex items-center justify-center gap-2">
+                {submitting ? (
+                  <>
+                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-[#7E0C0E] border-t-transparent"></span>
+                    <span>Submitting...</span>
+                  </>
+                ) : success ? (
+                  <>
+                    <CheckCircle size={16} className="text-green-500" />
+                    <span>Submitted ✓</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Submit</span>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
+                  </>
+                )}
+              </span>
+            </button>
           )}
           <span className="text-xs text-white/70 font-medium">
             * Required fields

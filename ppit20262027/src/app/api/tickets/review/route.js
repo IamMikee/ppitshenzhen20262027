@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { adminDb, requireAdmin, HttpError } from "@/lib/tickets/server";
+import { adminDb, requireAdmin, HttpError, holderRef, holderCodes, responseHasTicket } from "@/lib/tickets/server";
 
 /*
   POST { formId, responseId, declined }   (admin)
   Marks a response as declined (no ticket when tickets are issued) or undoes that.
-  Only possible before that person has a ticket.
+  Only possible before that response has a ticket.
 */
 export async function POST(req) {
   try {
@@ -17,8 +17,15 @@ export async function POST(req) {
     const response = (await responseRef.get()).data();
     if (!response) throw new HttpError(404, "Response not found.");
 
-    const holder = await db.collection("ticketHolders").doc(`${formId}_${response.submittedBy}`).get();
-    if (holder.exists) throw new HttpError(409, "This person already has a ticket.");
+    const [form, holder, ticketsFromResponse] = await Promise.all([
+      db.collection("forms").doc(formId).get(),
+      holderRef(db, formId, response.submittedBy).get(),
+      db.collection("tickets").where("formId", "==", formId).where("responseId", "==", responseId).limit(1).get(),
+    ]);
+    const ticketed = new Set(ticketsFromResponse.empty ? [] : [responseId]);
+    if (responseHasTicket(form.data() || {}, responseId, ticketed, holderCodes(holder.data()).length > 0)) {
+      throw new HttpError(409, "This response already has a ticket.");
+    }
 
     await responseRef.update({ ticketDeclined: declined });
     return NextResponse.json({ ok: true });

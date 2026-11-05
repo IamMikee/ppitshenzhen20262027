@@ -30,6 +30,7 @@ export default function FormAdminBuilder() {
     coverImage: "",
     isActive: false,
     isClosed: true,
+    allowMultiSub: false,
     ticket: EMPTY_TICKET,
     questions: [
       {
@@ -105,6 +106,7 @@ export default function FormAdminBuilder() {
           coverImage: data.coverImage || "",
           isActive: data.isActive !== undefined ? data.isActive : false,
           isClosed: data.isClosed !== undefined ? data.isClosed : true,
+          allowMultiSub: data.allowMultiSub === true,
           ticket: { ...EMPTY_TICKET, ...(data.ticket || {}) },
           questions: data.questions?.map((q) => ({
             id: q.id || generateClientId(),
@@ -454,6 +456,7 @@ export default function FormAdminBuilder() {
           questions: form.questions,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          allowMultiSub: !!form.allowMultiSub,
           ticket: form.ticket,
           updatedAt: new Date().toISOString(),
         });
@@ -468,6 +471,7 @@ export default function FormAdminBuilder() {
           coverImage: coverImageUrl,
           isActive: form.isActive,
           isClosed: form.isClosed,
+          allowMultiSub: !!form.allowMultiSub,
           ticket: form.ticket,
           createdBy: user.uid,
         });
@@ -513,6 +517,7 @@ export default function FormAdminBuilder() {
           coverImage: "",
           isActive: false,
           isClosed: true,
+          allowMultiSub: false,
           ticket: EMPTY_TICKET,
           questions: [
             {
@@ -1025,6 +1030,26 @@ export default function FormAdminBuilder() {
           </div>
         </div>
 
+        {/* Multiple Submissions */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">Multiple Submissions</h2>
+                <p className="text-sm text-gray-500">
+                  When off, each respondent can submit this form only once. When on, the same person can submit it multiple times.
+                </p>
+              </div>
+              <button
+                onClick={() => updateFormMeta("allowMultiSub", !form.allowMultiSub)}
+                className={`relative w-12 h-6 flex-shrink-0 rounded-full transition-all duration-300 ${form.allowMultiSub ? "bg-green-500" : "bg-gray-300"}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${form.allowMultiSub ? "left-6" : "left-0.5"}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Ticket */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
           <div className="p-6">
@@ -1087,70 +1112,70 @@ export default function FormAdminBuilder() {
           )}
           {form.questions.map((question, index) => question.type === PAGE ? (
             <Fragment key={question.id}>
-            {/* Page indicator sits outside the card so pages read as sections */}
-            <div className={index > 0 ? "pt-8 space-y-4" : ""}>
-              {index > 0 && <div className="border-t-2 border-dashed border-white/40" />}
-              <div className={pageLabelClass}>Page {pageNumbers[question.id]}</div>
-            </div>
-            <div
-              {...dropTargetProps(index)}
-              className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-8 border-gray-800 transition-opacity ${dragIndex === index ? "opacity-40" : ""}`}
-            >
-              <div {...dragHandleProps(index)}>
-                <GripHorizontal size={18} />
+              {/* Page indicator sits outside the card so pages read as sections */}
+              <div className={index > 0 ? "pt-8 space-y-4" : ""}>
+                {index > 0 && <div className="border-t-2 border-dashed border-white/40" />}
+                <div className={pageLabelClass}>Page {pageNumbers[question.id]}</div>
               </div>
-              <div className="px-6 pb-6 pt-2 space-y-4">
-                <input
-                  type="text"
-                  value={question.label}
-                  onChange={(e) => updateQuestion(question.id, "label", e.target.value)}
-                  placeholder="Page title (optional)"
-                  className="w-full text-xl font-semibold text-gray-800 border-0 border-b-2 border-transparent focus:border-[#7E0C0E] outline-none transition-all duration-200 px-2 py-1"
-                />
-                <textarea
-                  value={question.description || ""}
-                  onChange={(e) => updateQuestion(question.id, "description", e.target.value)}
-                  placeholder="Page description (optional) - use **bold**, *italic*, __underline__"
-                  rows={2}
-                  className="w-full text-gray-500 outline-none px-2 py-1 border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200 resize-y"
-                />
-
-                <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-gray-100">
-                  <label className="flex items-center gap-2 text-sm text-gray-500">
-                    After this page
-                    <select
-                      value={question.next || ""}
-                      onChange={(e) => updateQuestion(question.id, "next", e.target.value)}
-                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
-                    >
-                      {jumpTargets(index).map((t) => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button
-                    onClick={() => deleteQuestion(question.id)}
-                    className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 transition-colors ml-auto"
-                  >
-                    <Trash2 size={16} />
-                    Delete Page Break
-                  </button>
-
-                  <div className="flex gap-1">
-                    <button {...moveButtonProps(index, index - 1)}>
-                      <ChevronUp size={18} />
-                    </button>
-                    <button {...moveButtonProps(index, index + 2)}>
-                      <ChevronDown size={18} />
-                    </button>
-                  </div>
+              <div
+                {...dropTargetProps(index)}
+                className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-8 border-gray-800 transition-opacity ${dragIndex === index ? "opacity-40" : ""}`}
+              >
+                <div {...dragHandleProps(index)}>
+                  <GripHorizontal size={18} />
                 </div>
-                <p className="text-xs text-gray-400">
-                  &quot;After this page&quot; is the default. A Multiple Choice question on this page with &quot;Go to page based on answer&quot; overrides it.
-                </p>
+                <div className="px-6 pb-6 pt-2 space-y-4">
+                  <input
+                    type="text"
+                    value={question.label}
+                    onChange={(e) => updateQuestion(question.id, "label", e.target.value)}
+                    placeholder="Page title (optional)"
+                    className="w-full text-xl font-semibold text-gray-800 border-0 border-b-2 border-transparent focus:border-[#7E0C0E] outline-none transition-all duration-200 px-2 py-1"
+                  />
+                  <textarea
+                    value={question.description || ""}
+                    onChange={(e) => updateQuestion(question.id, "description", e.target.value)}
+                    placeholder="Page description (optional) - use **bold**, *italic*, __underline__"
+                    rows={2}
+                    className="w-full text-gray-500 outline-none px-2 py-1 border-b-2 border-transparent focus:border-[#7E0C0E] transition-all duration-200 resize-y"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-gray-100">
+                    <label className="flex items-center gap-2 text-sm text-gray-500">
+                      After this page
+                      <select
+                        value={question.next || ""}
+                        onChange={(e) => updateQuestion(question.id, "next", e.target.value)}
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                      >
+                        {jumpTargets(index).map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <button
+                      onClick={() => deleteQuestion(question.id)}
+                      className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 transition-colors ml-auto"
+                    >
+                      <Trash2 size={16} />
+                      Delete Page Break
+                    </button>
+
+                    <div className="flex gap-1">
+                      <button {...moveButtonProps(index, index - 1)}>
+                        <ChevronUp size={18} />
+                      </button>
+                      <button {...moveButtonProps(index, index + 2)}>
+                        <ChevronDown size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    &quot;After this page&quot; is the default. A Multiple Choice question on this page with &quot;Go to page based on answer&quot; overrides it.
+                  </p>
+                </div>
               </div>
-            </div>
             </Fragment>
           ) : (
             <div
