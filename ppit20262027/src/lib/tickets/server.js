@@ -42,6 +42,26 @@ export async function requireAdmin(req) {
 }
 
 /* =========================
+   TICKET HOLDERS
+========================= */
+
+// One doc per user per form, listing every ticket code they hold for it.
+export const holderRef = (db, formId, uid) => db.collection("ticketHolders").doc(`${formId}_${uid}`);
+
+// Holders written before multi-response forms kept a single `code` instead of `codes`.
+export function holderCodes(holder) {
+  if (Array.isArray(holder?.codes)) return holder.codes;
+  return holder?.code ? [holder.code] : [];
+}
+
+/*
+  Whether a response is already covered by a ticket. Normally that's a ticket made from it;
+  forms that take one response per person stop at one ticket per person, even with duplicate responses.
+*/
+export const responseHasTicket = (form, responseId, ticketedResponseIds, userHasTicket) =>
+  ticketedResponseIds.has(responseId) || (form.allowMultiSub !== true && userHasTicket);
+
+/* =========================
    TICKET CODES + QR SIGNING
 ========================= */
 
