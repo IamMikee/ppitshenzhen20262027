@@ -5,12 +5,12 @@ import PPIT from "../../../public/Home/foto_tangga.webp";
 import PPITTablet from "../../../public/Home/foto_tangga.webp";
 import PPITMobile from "../../../public/Home/foto_tangga.webp";
 import AboutImage from "../../../public/Home/3D_Logo.webp";
-import Mission from "../../../public/Home/mission.webp";
 import couplesweater from "../../../public/Home/couplesweater.webp";
 import sweatercewe from "../../../public/Home/sweatercewe.webp";
 import sweatercowo from "../../../public/Home/sweatercowo.webp";
 import GuidebookImage from "../../../public/Home/fotoguidebook.webp";
 import Link from "next/link";
+import { subscribePublishedNews, formatNewsDate, isShownOnHomepage } from "@/services/news";
 
 export default function Home() {
     const universities = [
@@ -46,63 +46,62 @@ export default function Home() {
         },
     ];
 
-    // Dummy News Data linking to /news/[slug]
-    const newsData = [
-        {
-            id: 1,
-            title: "Essential Do's & Don'ts in East Asia: Cultural Etiquette Guide for Students",
-            date: "October 28, 2026",
-            description: "From dining etiquette and public transit manners to managing trash and carrying cash, here is what every student living abroad in Asia needs to know.",
-            link: "/news/dos-donts-japan",
-            image: GuidebookImage
-        },
-        {
-            id: 2,
-            title: "Global Health & Travel Alert: 2026 Epidemic Preparedness & Advisory",
-            date: "October 28, 2026",
-            description: "Health officials issue international health protocols and travel safety guidelines as regional disease surveillance expands globally.",
-            link: "/news/global-health-update-2026",
-            image: PPITMobile
-        },
-        {
-            id: 3,
-            title: "Shenzhen Cup 2026: Annual Sports & Cultural Championship",
-            date: "October 14, 2026",
-            description: "Get ready for the biggest annual student tournament hosted by PPIT Shenzhen, bringing together talent, sportsmanship, and creativity.",
-            link: "/news/shenzhen-cup-2026",
-            image: Mission
-        },
-        {
-            id: 4,
-            title: "Academic & Career Development Talkshow with Guest Speakers",
-            date: "September 28, 2026",
-            description: "An inspiring career development talkshow connecting Indonesian students with industry leaders and professional opportunities in Shenzhen.",
-            link: "/news/career-talkshow-2026",
-            image: AboutImage
-        }
-    ];
+    // Live News Data from Firestore (published articles only).
+    // Featured articles come first, then the newest ones. Max 6 in the carousel.
+    const [newsData, setNewsData] = useState([]);
+    const [newsLoading, setNewsLoading] = useState(true);
+
+    useEffect(() => {
+        const unsub = subscribePublishedNews(
+            (list) => {
+                const visible = list.filter(isShownOnHomepage);
+                const featured = visible.filter((a) => a.featured);
+                const rest = visible.filter((a) => !a.featured);
+                setNewsData(
+                    [...featured, ...rest].slice(0, 6).map((a) => ({
+                        id: a.id,
+                        title: a.title,
+                        date: formatNewsDate(a.publishDate),
+                        description: a.summary,
+                        link: `/news/${a.slug}`,
+                        image: a.coverImage,
+                    }))
+                );
+                setNewsLoading(false);
+            },
+            () => setNewsLoading(false)
+        );
+        return () => unsub();
+    }, []);
 
     // Carousel State
     const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
 
+    // keep index valid when the list changes (e.g. an article gets unpublished)
+    useEffect(() => {
+        if (currentNewsIndex >= newsData.length) setCurrentNewsIndex(0);
+    }, [newsData.length, currentNewsIndex]);
+
     const nextNews = useCallback(() => {
+        if (newsData.length === 0) return;
         setCurrentNewsIndex((prev) => (prev + 1) % newsData.length);
     }, [newsData.length]);
 
     const prevNews = useCallback(() => {
+        if (newsData.length === 0) return;
         setCurrentNewsIndex((prev) => (prev - 1 + newsData.length) % newsData.length);
     }, [newsData.length]);
 
     // Auto-scroll timer (slides every 4 seconds when not hovered)
     useEffect(() => {
-        if (isPaused) return;
+        if (isPaused || newsData.length < 2) return;
         const interval = setInterval(() => {
             nextNews();
         }, 4000);
 
         return () => clearInterval(interval);
-    }, [isPaused, nextNews]);
+    }, [isPaused, nextNews, newsData.length]);
 
     return (
         <>
@@ -438,11 +437,21 @@ export default function Home() {
                         </div>
 
                         {/* Carousel Container */}
+                        {newsLoading ? (
+                            <div className="max-w-5xl mx-auto flex justify-center py-6">
+                                <div className="w-[85%] sm:w-[70%] md:w-[500px] h-[420px] rounded-xl bg-white/10 animate-pulse" />
+                            </div>
+                        ) : newsData.length === 0 ? (
+                            <p className="text-center text-white/70 py-12">
+                                No news yet — stay tuned for upcoming events!
+                            </p>
+                        ) : (
                         <div 
                             className="relative max-w-5xl mx-auto"
                             onMouseEnter={() => setIsPaused(true)}
                             onMouseLeave={() => setIsPaused(false)}
                         >
+                            {newsData.length > 1 && (<>
                             {/* Previous Button */}
                             <button
                                 onClick={prevNews}
@@ -464,6 +473,7 @@ export default function Home() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
                                 </svg>
                             </button>
+                            </>)}
 
                             {/* Cards Container with Peek Effect */}
                             <div className="overflow-hidden py-6 px-2">
@@ -472,8 +482,8 @@ export default function Home() {
                                         // Calculate position relative to current index
                                         const count = newsData.length;
                                         const isCurrent = index === currentNewsIndex;
-                                        const isPrev = index === (currentNewsIndex - 1 + count) % count;
-                                        const isNext = index === (currentNewsIndex + 1) % count;
+                                        const isNext = count > 1 && !isCurrent && index === (currentNewsIndex + 1) % count;
+                                        const isPrev = count > 2 && !isCurrent && index === (currentNewsIndex - 1 + count) % count;
 
                                         // Only display active card and immediately adjacent cards (peek effect)
                                         if (!isCurrent && !isPrev && !isNext) return null;
@@ -494,11 +504,14 @@ export default function Home() {
                                             >
                                                 {/* News Card Image Header */}
                                                 <div className="relative h-48 w-full overflow-hidden bg-black/30">
-                                                    <Image
-                                                        src={news.image}
-                                                        alt={news.title}
-                                                        className="w-full h-full object-cover opacity-90 transition-transform duration-500 hover:scale-105"
-                                                    />
+                                                    {news.image && (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img
+                                                            src={news.image}
+                                                            alt={news.title}
+                                                            className="w-full h-full object-cover opacity-90 transition-transform duration-500 hover:scale-105"
+                                                        />
+                                                    )}
                                                     <div className="absolute top-3 left-3 bg-red-700/90 text-white text-xs px-3 py-1 rounded-full font-medium tracking-wider backdrop-blur-md">
                                                         {news.date}
                                                     </div>
@@ -535,6 +548,7 @@ export default function Home() {
                             </div>
 
                             {/* Carousel Navigation Indicators / Dots */}
+                            {newsData.length > 1 && (
                             <div className="flex justify-center items-center gap-2 mt-6">
                                 {newsData.map((_, idx) => (
                                     <button
@@ -549,7 +563,9 @@ export default function Home() {
                                     />
                                 ))}
                             </div>
+                            )}
                         </div>
+                        )}
                     </div>
                 </section>
 

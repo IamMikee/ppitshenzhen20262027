@@ -34,6 +34,14 @@ export default function ControlPanelIndex() {
                         <p className="text-gray-400 text-sm">View and Modify Open Recruitment Member Applications</p>
                     </div>
                     </Link>
+
+                    <Link href="/ctrlpanel/news-dashboard">
+                    <div className="bg-[#2a2a2a] rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition">
+                        <div className="text-3xl mb-2">📰</div>
+                        <h3 className="text-white font-semibold">News &amp; Events</h3>
+                        <p className="text-gray-400 text-sm">Write, edit and publish articles for the website</p>
+                    </div>
+                    </Link>
                 </div>
             </div>
         </div>
