@@ -104,12 +104,12 @@ export default function loadAllFormsPage(){
                     const status = attendedForms.includes(form.id)
                         ? "attended"
                         : submittedForms.includes(form.id)
-                        ? "submitted"
+                        ? (form.allowMultiSub && !form.isClosed ? "resubmit" : "submitted")
                         : form.isClosed
                         ? "closed"
                         : "open";
 
-                    const buttonDisabled = status != "open" && !admin;
+                    const buttonDisabled = status != "open" && status != "resubmit" && !admin;
                     const buttonStyle = {
                         marginBottom: "1rem",
                         padding: "0.45rem 1.4rem",
@@ -173,6 +173,8 @@ export default function loadAllFormsPage(){
                                     }}>
                                 {admin
                                     ? "Edit"
+                                    : status === "resubmit"
+                                    ? "Submit Again"
                                     : status === "submitted"
                                     ? "Submitted"
                                     : status === "attended"

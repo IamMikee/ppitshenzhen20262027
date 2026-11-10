@@ -152,6 +152,7 @@ export async function getAllForms() {
       headerColor: data.headerColor,
       isActive: data.isActive,
       isClosed: data.isClosed,
+      allowMultiSub: data.allowMultiSub === true,
     };
   });
 
