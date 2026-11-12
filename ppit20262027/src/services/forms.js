@@ -153,6 +153,7 @@ export async function getAllForms() {
       isActive: data.isActive,
       isClosed: data.isClosed,
       allowMultiSub: data.allowMultiSub === true,
+      ticket: data.ticket,
     };
   });
 

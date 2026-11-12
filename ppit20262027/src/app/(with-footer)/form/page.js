@@ -131,7 +131,7 @@ export default function loadAllFormsPage(){
                         background:
                         admin ? "#e40000" :
                         status === "submitted"
-                            ? "#fbbf24"
+                            ? (showMyTicket ? "#16A34A" : "#fbbf24")
                             : status === "attended"
                             ? "#000"
                             : status === "closed"
