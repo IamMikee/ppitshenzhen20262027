@@ -109,7 +109,10 @@ export default function loadAllFormsPage(){
                         ? "closed"
                         : "open";
 
-                    const buttonDisabled = status != "open" && status != "resubmit" && !admin;
+                    // Single-submit form with e-tickets: submitted users can open their ticket
+                    const showMyTicket = status === "submitted" && form.ticket?.enabled && !form.allowMultiSub;
+
+                    const buttonDisabled = status != "open" && status != "resubmit" && !showMyTicket && !admin;
                     const buttonStyle = {
                         marginBottom: "1rem",
                         padding: "0.45rem 1.4rem",
@@ -176,7 +179,7 @@ export default function loadAllFormsPage(){
                                     : status === "resubmit"
                                     ? "Submit Again"
                                     : status === "submitted"
-                                    ? "Submitted"
+                                    ? (showMyTicket ? "My Ticket" : "Submitted")
                                     : status === "attended"
                                     ? "Attended"
                                     : status === "closed"
