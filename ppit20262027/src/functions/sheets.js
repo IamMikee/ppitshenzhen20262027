@@ -6,6 +6,15 @@ import { initializeApp } from 'firebase-admin/app';
 initializeApp();
 const db = getFirestore();
 
+// Bump to force every form's sheet to be rewritten on the next run
+const LAYOUT_VERSION = 2;
+
+// Question types that never get an answer (and so never get a column)
+const NON_ANSWERABLE = ['info', 'image', 'page'];
+
+const getColumnQuestions = (questions = []) =>
+    questions.filter(q => !NON_ANSWERABLE.includes(q.type));
+
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhxV4rykqYlrhYnmM-1jljwudwiBd4_a04Q03FhcMK0VdGT8R1qdE8mP0NYqK_CNnpCA/exec';
 
 export const syncResponsesToSheets = onSchedule(
@@ -75,7 +84,7 @@ export const syncResponsesToSheets = onSchedule(
                 const result = await callAppsScript('createSheet', {
                     formId: formId,
                     formTitle: formData.title || 'Form',
-                    questions: formData.questions || [],
+                    questions: getColumnQuestions(formData.questions),
                     serviceAccountEmail: serviceAccount.client_email,
                 });
 
@@ -101,42 +110,50 @@ export const syncResponsesToSheets = onSchedule(
             }
         };
 
-        const checkIfSheetHasHeaders = async (sheetId) => {
+        const columnLetter = (n) => {
+            let letters = '';
+            while (n > 0) {
+                const m = (n - 1) % 26;
+                letters = String.fromCharCode(65 + m) + letters;
+                n = Math.floor((n - 1) / 26);
+            }
+            return letters;
+        };
+
+        const getSheetHeaderWidth = async (sheetId) => {
             try {
                 const response = await sheets.spreadsheets.values.get({
                     spreadsheetId: sheetId,
-                    range: 'Responses!A1:Z1',
+                    range: 'Responses!1:1',
                 });
-
-                const rows = response.data.values;
-                return rows && rows.length > 0;
-
+                return response.data.values?.[0]?.length || 0;
             } catch (error) {
-                return false;
+                return 0;
             }
         };
 
-        const appendToSheet = async (sheetId, headers, rows, hasHeaders) => {
+        // Rewrites the whole Responses tab so columns always match the current questions.
+        // Only our own columns are cleared; anything to the right of them is left alone.
+        const writeSheet = async (sheetId, values, previousWidth) => {
             try {
-                let values = [];
+                const width = Math.max(values[0].length, previousWidth);
 
-                if (!hasHeaders) {
-                    values = [headers, ...rows];
-                } else {
-                    values = rows;
-                }
+                await sheets.spreadsheets.values.clear({
+                    spreadsheetId: sheetId,
+                    range: `Responses!A:${columnLetter(width)}`,
+                });
 
-                await sheets.spreadsheets.values.append({
+                await sheets.spreadsheets.values.update({
                     spreadsheetId: sheetId,
                     range: 'Responses!A1',
                     valueInputOption: 'RAW',
                     requestBody: {
-                        values: values,
+                        values,
                     },
                 });
 
             } catch (error) {
-                console.error('❌ Failed to append data:', error);
+                console.error('❌ Failed to write data:', error);
                 throw error;
             }
         };
@@ -190,6 +207,13 @@ export const syncResponsesToSheets = onSchedule(
             }
         };
 
+        const stripHtml = (html) => String(html || '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .trim();
+
         const getHeaders = (questions) => {
             const baseHeaders = [
                 'Response ID',
@@ -198,15 +222,15 @@ export const syncResponsesToSheets = onSchedule(
                 'Submitted At'
             ];
 
-            const questionHeaders = questions
-                .filter(q => q.type !== 'info' && q.type !== 'image')
-                .map(q => q.label || q.id);
+            const questionHeaders = getColumnQuestions(questions)
+                .map(q => stripHtml(q.label) || q.id);
 
             return [...baseHeaders, ...questionHeaders];
         };
 
         const formatAnswer = (answer, type) => {
-            if (answer === undefined || answer === null) return '';
+            // Questions the respondent never reached (conditional pages) or skipped
+            if (answer === undefined || answer === null) return '-';
 
             switch (type) {
                 case 'checkbox':
@@ -241,30 +265,15 @@ export const syncResponsesToSheets = onSchedule(
                 submittedAtStr
             ];
 
-            if (!questions || questions.length === 0) {
-                return baseRow;
-            }
-
-            const answerRow = questions
-                .filter(q => q.type !== 'info' && q.type !== 'image')
-                .map(q => {
-                    const answer = response.answers?.[q.id];
-                    return formatAnswer(answer, q.type);
-                });
+            const answerRow = getColumnQuestions(questions)
+                .map(q => formatAnswer(response.answers?.[q.id], q.type));
 
             return [...baseRow, ...answerRow];
         };
 
-        const appendToGoogleSheet = async (formId, responses) => {
+        const syncFormToSheet = async (formId, formData, responses, previousWidth) => {
             try {
                 const formRef = db.collection('forms').doc(formId);
-                const formDoc = await formRef.get();
-
-                if (!formDoc.exists) {
-                    throw new Error(`Form ${formId} not found`);
-                }
-
-                const formData = formDoc.data();
                 let sheetId = formData.sheetId;
 
                 if (!sheetId) {
@@ -279,24 +288,19 @@ export const syncResponsesToSheets = onSchedule(
                     console.log(`✅ Created new sheet with ID: ${sheetId}`);
                 }
 
-                if (!responses || responses.length === 0) {
-                    console.log('ℹ️ No responses to append');
-                    return;
-                }
+                const questions = formData.questions || [];
+                const headers = getHeaders(questions);
+                const rows = responses.map(response => formatResponseRow(response, questions));
 
-                const headers = getHeaders(formData.questions || []);
-                const rows = responses.map(response => formatResponseRow(response, formData.questions || []));
+                const width = previousWidth ?? await getSheetHeaderWidth(sheetId);
+                await writeSheet(sheetId, [headers, ...rows], width);
 
-                const hasHeaders = await checkIfSheetHasHeaders(sheetId);
+                console.log(`✅ Wrote ${rows.length} responses (${headers.length} columns) to sheet ${sheetId}`);
 
-                await appendToSheet(sheetId, headers, rows, hasHeaders);
-
-                console.log(`✅ Appended ${rows.length} responses to sheet ${sheetId}`);
-
-                return { success: true, sheetId };
+                return headers.length;
 
             } catch (error) {
-                console.error('❌ Failed to append to sheet:', error);
+                console.error('❌ Failed to sync sheet:', error);
                 throw error;
             }
         };
@@ -330,20 +334,30 @@ export const syncResponsesToSheets = onSchedule(
                     .get();
 
                 const totalCount = countSnap.data().count;
-                const newCount = totalCount - (metadata.totalCount || 0);
+                const formUpdatedAt = formData.updatedAt || null;
 
-                if (newCount === 0) {
-                    console.log(`ℹ️ No new responses for form ${formId}`);
+                // Forms nobody has answered yet don't get a sheet
+                if (totalCount === 0 && !formData.sheetId) {
                     continue;
                 }
 
-                console.log(`📊 Found ${newCount} new responses for form ${formId}`);
+                // Rewrite when responses come in or go, or the questions were edited
+                const changed =
+                    totalCount !== (metadata.totalCount || 0) ||
+                    formUpdatedAt !== (metadata.formUpdatedAt || null) ||
+                    metadata.layoutVersion !== LAYOUT_VERSION;
+
+                if (!changed) {
+                    console.log(`ℹ️ No changes for form ${formId}`);
+                    continue;
+                }
+
+                console.log(`📊 Syncing form ${formId} (${totalCount} responses)`);
 
                 const snapshot = await db.collection('forms')
                     .doc(formId)
                     .collection('responses')
-                    .orderBy('submittedAt', 'desc')
-                    .limit(newCount)
+                    .orderBy('submittedAt', 'asc')
                     .get();
 
                 const responses = snapshot.docs.map(doc => ({
@@ -351,12 +365,14 @@ export const syncResponsesToSheets = onSchedule(
                     ...doc.data()
                 }));
 
-                await appendToGoogleSheet(formId, responses);
+                const columnCount = await syncFormToSheet(formId, formData, responses, metadata.columnCount);
 
                 await metaRef.set({
                     totalCount: totalCount,
+                    formUpdatedAt: formUpdatedAt,
+                    layoutVersion: LAYOUT_VERSION,
+                    columnCount: columnCount,
                     lastSync: new Date().toISOString(),
-                    responsesSynced: newCount
                 }, { merge: true });
 
                 console.log(`✅ Synced ${responses.length} responses for form ${formId}`);

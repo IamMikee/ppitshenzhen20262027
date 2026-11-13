@@ -5,7 +5,42 @@ import { collection, getDocs, doc, getDoc, query, orderBy } from "firebase/fires
 import { db, auth } from "../../../../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter, useParams } from "next/navigation"
-import { ChevronLeft, ChevronRight, List, LayoutGrid, Calendar, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, LayoutGrid, ListChecks, Calendar, Clock, Ticket } from "lucide-react";
+import { isAnswerable } from "../../../../../lib/forms/pages";
+
+async function ticketApi(path, { method = "GET", body } = {}) {
+    await auth.authStateReady();
+    const token = await auth.currentUser?.getIdToken();
+    const res = await fetch(path, {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    return data;
+}
+
+function FileAnswer({ url }) {
+    const [failed, setFailed] = useState(false);
+    if (failed) {
+        return (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                View uploaded file
+            </a>
+        );
+    }
+    return (
+        <div className="mt-2">
+            <img
+                src={url}
+                alt="Uploaded file"
+                className="rounded-lg max-w-full max-h-96 object-contain border border-gray-200"
+                onError={() => setFailed(true)}
+            />
+        </div>
+    );
+}
 
 export default function ResponsesPage() {
     const [responses, setResponses] = useState([]);
@@ -15,13 +50,21 @@ export default function ResponsesPage() {
     const [viewMode, setViewMode] = useState("perSubmission");
     const [currentIndex, setCurrentIndex] = useState(0);
     const [inputValue, setInputValue] = useState("");
+    const [questionIndex, setQuestionIndex] = useState(0);
+    const [ticketEnabled, setTicketEnabled] = useState(false);
+    const [allowMultiSub, setAllowMultiSub] = useState(false);
+    const [ticketList, setTicketList] = useState(null);
+    const [issuing, setIssuing] = useState(false);
+    const [ticketMsg, setTicketMsg] = useState("");
+    const [reviewingId, setReviewingId] = useState(null);
     const router = useRouter();
     const formId = useParams()?.formId;
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (!u) {
-                router.push("/login")
+                router.push("/login");
+                return;
             }
 
             try {
@@ -31,11 +74,12 @@ export default function ResponsesPage() {
                 if (userSnap.exists()) {
                     const userData = userSnap.data();
                     if (!userData.admin) {
-                        router.push("/")
+                        router.push("/");
                     }
-                }
+                } else router.push("/");
             } catch (error) {
                 console.error("failed to verify admin status: " + error);
+                router.push("/");
             }
         });
         return () => unsub();
@@ -89,11 +133,16 @@ export default function ResponsesPage() {
                             id: key[1].id || "",
                             label: key[1].label || "",
                             type: key[1].type || "",
+                            required: !!key[1].required,
+                            options: key[1].options || [],
                         };
                     })
-                    .filter(q => q !== null);
+                    // Page breaks, info text and images can't be answered, so they're not questions here
+                    .filter(q => q !== null && isAnswerable(q));
 
                 setQuestions(questionList);
+                setTicketEnabled(data.ticket?.enabled === true);
+                setAllowMultiSub(data.allowMultiSub === true);
             } catch (err) {
                 console.error(err);
             }
@@ -103,6 +152,105 @@ export default function ResponsesPage() {
             fetchForm();
         }
     }, [formId]);
+
+    /* =========================
+       TICKETS (ticketed forms only)
+    ========================= */
+    const loadTickets = async () => {
+        try {
+            const { attendees } = await ticketApi(`/api/tickets/check-in?formId=${encodeURIComponent(formId)}`);
+            setTicketList(attendees);
+        } catch (err) {
+            setTicketMsg(err.message);
+        }
+    };
+
+    useEffect(() => {
+        if (ticketEnabled && formId) loadTickets();
+    }, [ticketEnabled, formId]);
+
+    const setDeclined = async (res, declined) => {
+        setReviewingId(res.id);
+        try {
+            await ticketApi("/api/tickets/review", { method: "POST", body: { formId, responseId: res.id, declined } });
+            setResponses((prev) => prev.map((r) => (r.id === res.id ? { ...r, ticketDeclined: declined } : r)));
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setReviewingId(null);
+        }
+    };
+
+    const tickets = ticketList || [];
+    const ticketByResponse = new Map(tickets.map((t) => [t.responseId, t]));
+    const ticketByUid = new Map(tickets.map((t) => [t.uid, t]));
+    // Same rule as the server: one-response forms stop at one ticket per person, even with duplicate responses
+    const ticketFor = (res) => ticketByResponse.get(res.id) || (allowMultiSub ? undefined : ticketByUid.get(res.submittedBy));
+    const awaitingResponses = responses.filter((r) => !r.ticketDeclined && !ticketFor(r));
+    const toIssue = allowMultiSub ? awaitingResponses.length : new Set(awaitingResponses.map((r) => r.submittedBy)).size;
+    const declinedCount = responses.filter((r) => r.ticketDeclined && !ticketFor(r)).length;
+    const unsentCount = tickets.filter((t) => t.emailStatus === "pending").length;
+    const failedCount = tickets.filter((t) => t.emailStatus === "failed").length;
+
+    // The server emails in chunks, so keep calling until nothing is left (or nothing moved).
+    const issueTickets = async (retryFailed = false) => {
+        if (
+            !retryFailed &&
+            toIssue > 0 &&
+            !confirm(`Issue ${toIssue} ${toIssue === 1 ? "ticket" : "tickets"} and email them now?\n\n${declinedCount} declined ${declinedCount === 1 ? "response" : "responses"} won't get one. People who register later can be issued in another run.`)
+        ) return;
+
+        setIssuing(true);
+        setTicketMsg("Issuing tickets... emails go out slowly to keep Gmail happy, so this can take a few minutes. Keep this page open.");
+        const total = { issued: 0, sent: 0, failed: 0 };
+        try {
+            let data;
+            let first = true;
+            do {
+                data = await ticketApi("/api/tickets/issue", { method: "POST", body: { formId, retryFailed: retryFailed && first } });
+                first = false;
+                total.issued += data.issued;
+                total.sent += data.sent;
+                total.failed += data.failed;
+                setTicketMsg(`Emailing tickets... ${total.sent} sent, ${data.remaining} to go. Keep this page open.`);
+                // Pause between batches so Gmail doesn't see one long burst
+                if (data.remaining > 0 && data.waitMs) await new Promise((resolve) => setTimeout(resolve, data.waitMs));
+            } while (data.remaining > 0 && data.sent + data.failed > 0);
+            setTicketMsg(`Done. ${total.issued} issued, ${total.sent} emailed${total.failed ? `, ${total.failed} failed` : ""}.`);
+        } catch (err) {
+            setTicketMsg(`Stopped: ${err.message} Press the button again to continue.`);
+        } finally {
+            setIssuing(false);
+            loadTickets();
+        }
+    };
+
+    const renderTicketStatus = (res) => {
+        if (!ticketEnabled || !ticketList) return null;
+        const t = ticketFor(res);
+        if (t) {
+            return (
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
+                    Ticket {t.code}
+                    {t.emailStatus === "failed" ? " · email failed" : t.emailStatus === "pending" ? " · not emailed yet" : ""}
+                </span>
+            );
+        }
+        return (
+            <span className="flex items-center gap-2">
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${res.ticketDeclined ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                    {res.ticketDeclined ? "Declined" : "Awaiting ticket"}
+                </span>
+                <button
+                    onClick={() => setDeclined(res, !res.ticketDeclined)}
+                    disabled={reviewingId === res.id || issuing}
+                    className="text-xs text-gray-500 hover:text-[#7E0C0E] underline disabled:opacity-50"
+                >
+                    {res.ticketDeclined ? "Undo decline" : "Decline"}
+                </button>
+            </span>
+        );
+    };
 
     const escapeCSV = (value) => {
         if (value === null || value === undefined) return "";
@@ -222,6 +370,13 @@ export default function ResponsesPage() {
         }
     };
 
+    // Jump from the per-question view to one person's full submission
+    const openResponse = (index) => {
+        setCurrentIndex(index);
+        setInputValue(String(index + 1));
+        setViewMode("perSubmission");
+    };
+
     const handleInputChange = (e) => {
         const value = e.target.value;
         setInputValue(value);
@@ -259,19 +414,7 @@ export default function ResponsesPage() {
         if (value === undefined || value === null) return "—";
         if (Array.isArray(value)) return value.join(", ");
         if (questionType === "file" && typeof value === "string" && value.startsWith("http")) {
-            return (
-                <div className="mt-2">
-                    <img
-                        src={value}
-                        alt="Uploaded file"
-                        className="rounded-lg max-w-full max-h-96 object-contain border border-gray-200"
-                        onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.parentElement.innerHTML = `<a href="${value}" target="_blank" class="text-blue-600 hover:underline">View uploaded file</a>`;
-                        }}
-                    />
-                </div>
-            );
+            return <FileAnswer key={value} url={value} />;
         }
         return value;
     };
@@ -300,6 +443,24 @@ export default function ResponsesPage() {
 
     const currentResponse = responses[currentIndex];
 
+    // Per Question view. Conditional questions are treated like any other: we just list whoever answered.
+    const isAnswered = (value) => value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0);
+    const currentQuestion = questions[Math.min(questionIndex, questions.length - 1)];
+    const questionAnswers = currentQuestion
+        ? responses
+            .map((res, index) => ({ res, index, value: res.answers?.[currentQuestion.id] }))
+            .filter((a) => isAnswered(a.value))
+        : [];
+
+    // Option tally for radio/checkbox; also counts answers whose option was later renamed or removed
+    const optionCounts = {};
+    if (currentQuestion?.type === "radio" || currentQuestion?.type === "checkbox") {
+        currentQuestion.options.forEach((opt) => (optionCounts[opt] = 0));
+        questionAnswers.forEach(({ value }) => {
+            (Array.isArray(value) ? value : [value]).forEach((v) => (optionCounts[v] = (optionCounts[v] || 0) + 1));
+        });
+    }
+
     return (
         <div className="min-h-screen p-6 pt-24 bg-[#7E0C0E]">
             <div className="max-w-4xl mx-auto">
@@ -327,6 +488,16 @@ export default function ResponsesPage() {
                             >
                                 <List size={18} />
                                 All Responses
+                            </button>
+                            <button
+                                onClick={() => setViewMode("perQuestion")}
+                                className={`px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 ${viewMode === "perQuestion"
+                                    ? "bg-[#7E0C0E] text-white shadow-md"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                    }`}
+                            >
+                                <ListChecks size={18} />
+                                Per Question
                             </button>
                         </div>
                     </div>
@@ -360,6 +531,45 @@ export default function ResponsesPage() {
                         </div>
                     </div>
                 </div>
+
+                {ticketEnabled && (
+                    <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                    <Ticket size={18} /> E-Tickets
+                                </h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    {ticketList
+                                        ? `${tickets.length} issued · ${toIssue} awaiting · ${declinedCount} declined${unsentCount ? ` · ${unsentCount} not emailed yet` : ""}`
+                                        : "Loading tickets..."}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => issueTickets()}
+                                disabled={!ticketList || issuing || (toIssue === 0 && unsentCount === 0)}
+                                className="bg-[#7E0C0E] text-white px-4 py-2 rounded-lg hover:bg-[#9E1A1C] transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {issuing
+                                    ? "Working..."
+                                    : toIssue > 0
+                                        ? `Issue ${toIssue} ${toIssue === 1 ? "ticket" : "tickets"}`
+                                        : unsentCount > 0
+                                            ? `Send ${unsentCount} pending ${unsentCount === 1 ? "email" : "emails"}`
+                                            : "All tickets issued"}
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-3">
+                            Nobody gets a ticket until you press Issue. Everyone is included unless you mark their response Declined below.
+                        </p>
+                        {failedCount > 0 && !issuing && (
+                            <button onClick={() => issueTickets(true)} className="mt-2 text-sm text-red-600 hover:underline">
+                                {failedCount} {failedCount === 1 ? "email" : "emails"} failed. Retry
+                            </button>
+                        )}
+                        {ticketMsg && <p className="text-sm text-gray-700 mt-3">{ticketMsg}</p>}
+                    </div>
+                )}
 
                 {responses.length === 0 ? (
                     <div className="bg-white rounded-2xl shadow-sm p-12 text-center">
@@ -399,9 +609,12 @@ export default function ResponsesPage() {
                                                 <ChevronRight size={20} className="text-gray-700" />
                                             </button>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                                            <Calendar size={16} />
-                                            <span>Submitted: {formatDate(currentResponse?.submittedAt)}</span>
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            {currentResponse && renderTicketStatus(currentResponse)}
+                                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                <Calendar size={16} />
+                                                <span>Submitted: {formatDate(currentResponse?.submittedAt)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -428,10 +641,97 @@ export default function ResponsesPage() {
                                     </div>
                                 </div>
                             </div>
+                        ) : viewMode === "perQuestion" ? (
+                            // Per Question View
+                            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                {/* Question picker */}
+                                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => setQuestionIndex((i) => Math.max(i - 1, 0))}
+                                            disabled={questionIndex === 0}
+                                            className="p-2 rounded-lg bg-white shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-sm"
+                                        >
+                                            <ChevronLeft size={20} className="text-gray-700" />
+                                        </button>
+                                        <select
+                                            value={questionIndex}
+                                            onChange={(e) => setQuestionIndex(Number(e.target.value))}
+                                            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#7E0C0E] focus:border-transparent"
+                                        >
+                                            {questions.map((q, i) => (
+                                                <option key={q.id} value={i}>
+                                                    {i + 1}. {q.label || q.id}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={() => setQuestionIndex((i) => Math.min(i + 1, questions.length - 1))}
+                                            disabled={questionIndex >= questions.length - 1}
+                                            className="p-2 rounded-lg bg-white shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-sm"
+                                        >
+                                            <ChevronRight size={20} className="text-gray-700" />
+                                        </button>
+                                    </div>
+                                    {currentQuestion && (
+                                        <p className="text-sm text-gray-500 mt-3">
+                                            {questionAnswers.length} of {responses.length} {responses.length === 1 ? "response" : "responses"} answered this question
+                                        </p>
+                                    )}
+                                </div>
+
+                                {!currentQuestion ? (
+                                    <p className="p-12 text-center text-gray-500">This form has no questions to show.</p>
+                                ) : (
+                                    <div className="p-6 space-y-6">
+                                        {Object.keys(optionCounts).length > 0 && (
+                                            <div className="space-y-3">
+                                                {Object.entries(optionCounts).map(([opt, count]) => {
+                                                    const percent = questionAnswers.length ? Math.round((count / questionAnswers.length) * 100) : 0;
+                                                    return (
+                                                        <div key={opt}>
+                                                            <div className="flex justify-between gap-4 text-sm text-gray-700 mb-1">
+                                                                <span className="break-words">{opt}</span>
+                                                                <span className="text-gray-500 whitespace-nowrap">{count} ({percent}%)</span>
+                                                            </div>
+                                                            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                                                <div className="h-full bg-[#7E0C0E]" style={{ width: `${percent}%` }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {questionAnswers.length === 0 ? (
+                                            <p className="text-center text-gray-500">No one has answered this question yet.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {questionAnswers.map(({ res, index, value }) => (
+                                                    <div key={res.id} className="bg-gray-50 rounded-lg p-3">
+                                                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 mb-1">
+                                                            <button
+                                                                onClick={() => openResponse(index)}
+                                                                className="font-medium hover:text-[#7E0C0E] hover:underline"
+                                                            >
+                                                                Response #{index + 1}
+                                                            </button>
+                                                            <span>{formatDate(res.submittedAt)}</span>
+                                                        </div>
+                                                        <div className="text-sm text-gray-700 break-words">
+                                                            {renderAnswer(value, currentQuestion.type)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             // All Responses View
                             <div className="space-y-4">
-                                {responses.map((res, index) => {
+                                {[...responses].reverse().map((res, index) => {
                                     const responseNumber = responses.length - index;
                                     return (
                                         <div key={res.id} className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
@@ -439,9 +739,12 @@ export default function ResponsesPage() {
                                                 <span className="font-semibold text-gray-700">
                                                     Response #{responseNumber}
                                                 </span>
-                                                <div className="flex items-center gap-2 text-sm text-gray-500">
-                                                    <Clock size={14} />
-                                                    <span>{formatDate(res.submittedAt)}</span>
+                                                <div className="flex flex-wrap items-center gap-4">
+                                                    {renderTicketStatus(res)}
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                        <Clock size={14} />
+                                                        <span>{formatDate(res.submittedAt)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="p-6">
